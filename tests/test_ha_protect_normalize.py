@@ -26,26 +26,43 @@ def test_normalize_person_detection_from_alarm_manager_style_payload() -> None:
         "alarm": {
             "name": "Front Door detected a person",
             "conditions": [{"condition": {"type": "is", "source": "person"}}],
-            "triggers": [{"key": "person", "device": "CAMERA01"}],
+            "triggers": [{"key": "person", "device": "1C6A1B0E8173"}],
         }
     }
 
     normalized = normalize_webhook_payload(payload, {})
 
     assert normalized["primary_detection_type"] == "person"
-    assert "person" in normalized["event_types"][0]
+    assert normalized["device_ids"] == ["1C6A1B0E8173"]
+    assert normalized["event_types"] == ["ha_protect_bridge_person"]
 
 
-def test_normalize_query_only_animal_detection() -> None:
+def test_normalize_query_only_doorbell_ring_alias() -> None:
     normalized = normalize_webhook_payload(
         {},
         {
-            "alarm": "Backyard animal detected",
-            "key": "animal",
-            "device": "CAMERA02",
+            "alarm": "Front doorbell ring",
+            "source": "doorbell",
+            "device": "1C6A1B0E8173",
         },
     )
 
-    assert normalized["alarm_name"] == "Backyard animal detected"
-    assert normalized["detection_types"] == ["animal"]
-    assert normalized["device_ids"] == ["CAMERA02"]
+    assert normalized["alarm_name"] == "Front doorbell ring"
+    assert normalized["detection_types"] == ["ring"]
+    assert normalized["device_ids"] == ["1C6A1B0E8173"]
+
+
+def test_normalize_audio_alarm_alias() -> None:
+    normalized = normalize_webhook_payload(
+        {
+            "alarm": {
+                "name": "Kitchen heard smoke",
+                "conditions": [{"condition": {"type": "is", "source": "audio_alarm_smoke"}}],
+                "triggers": [{"device": "84784828725C"}],
+            }
+        },
+        {},
+    )
+
+    assert normalized["primary_detection_type"] == "audio_alarm_smoke"
+    assert normalized["device_ids"] == ["84784828725C"]

@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sitebridge"
-version = "0.1.0"
-description = "Development scaffold for a Home Assistant UniFi Protect bridge and future shared tooling split."
+version = "0.2.0"
+description = "Home Assistant HACS integration for automatic UniFi Protect webhook provisioning and sensors."
 readme = "README.md"
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "httpx>=0.28,<0.29",
     "python-dotenv>=1.1,<2",
@@ -31,7 +31,7 @@ pythonpath = [".", "src"]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]

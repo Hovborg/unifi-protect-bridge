@@ -1,3 +1,21 @@
 show_setup_info:
   name: Show setup info
-  description: Show a persistent notification with the generated HA webhook URL and recommended UniFi Protect Alarm Manager settings.
+  description: Show the generated webhook URL and the managed Protect sources.
+  fields:
+    entry_id:
+      name: Config entry id
+      description: Optional config entry id when more than one bridge is installed.
+      required: false
+      selector:
+        text:
+
+resync:
+  name: Resync Protect bridge
+  description: Refresh cameras and recreate managed Protect webhook automations when needed.
+  fields:
+    entry_id:
+      name: Config entry id
+      description: Optional config entry id when more than one bridge is installed.
+      required: false
+      selector:
+        text:

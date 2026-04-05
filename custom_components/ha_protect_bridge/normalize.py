@@ -13,42 +13,48 @@ _ALIASES = {
     "pets": "animal",
     "car": "vehicle",
     "cars": "vehicle",
-    "licenseplate": "license_plate",
-    "licence_plate": "license_plate",
-    "license_plates": "license_plate",
-    "personofinterest": "person_of_interest",
-    "persons_of_interest": "person_of_interest",
-    "linecrossing": "line_crossing",
-    "line_cross": "line_crossing",
-    "doorbellring": "doorbell",
-    "ring": "doorbell",
-    "nfccard": "nfc",
-    "nfc_scan": "nfc",
-    "nfc_scanned": "nfc",
-    "waterleak": "water_leak",
-    "smokealarm": "smoke",
-    "carbon_monoxide": "co",
+    "licenseplate": "license_plate_of_interest",
+    "licence_plate": "license_plate_of_interest",
+    "license_plates": "license_plate_of_interest",
+    "personofinterest": "face_of_interest",
+    "persons_of_interest": "face_of_interest",
+    "knownface": "face_known",
+    "unknownface": "face_unknown",
+    "faceofinterest": "face_of_interest",
+    "doorbellring": "ring",
+    "doorbell": "ring",
+    "known_face": "face_known",
+    "unknown_face": "face_unknown",
+    "person_of_interest": "face_of_interest",
+    "smokealarm": "audio_alarm_smoke",
+    "smoke": "audio_alarm_smoke",
+    "carbon_monoxide": "audio_alarm_co",
+    "co": "audio_alarm_co",
+    "glassbreak": "audio_alarm_glass_break",
+    "carhorn": "audio_alarm_car_horn",
+    "burglaralarm": "audio_alarm_burglar",
+    "siren": "audio_alarm_siren",
+    "speech": "audio_alarm_speak",
+    "bark": "audio_alarm_bark",
 }
 
 _NAME_HINTS = (
-    ("person of interest", "person_of_interest"),
-    ("known face", "known_face"),
-    ("unknown face", "unknown_face"),
-    ("license plate", "license_plate"),
-    ("line crossing", "line_crossing"),
-    ("water leak", "water_leak"),
-    ("doorbell ring", "doorbell"),
-    ("doorbell", "doorbell"),
+    ("face of interest", "face_of_interest"),
+    ("known face", "face_known"),
+    ("unknown face", "face_unknown"),
+    ("license plate", "license_plate_of_interest"),
+    ("doorbell ring", "ring"),
+    ("doorbell", "ring"),
     ("vehicle", "vehicle"),
     ("package", "package"),
     ("animal", "animal"),
     ("person", "person"),
     ("motion", "motion"),
-    ("sound", "sound"),
-    ("nfc", "nfc"),
-    ("face", "face"),
-    ("smoke", "smoke"),
-    ("co", "co"),
+    ("smoke", "audio_alarm_smoke"),
+    ("glass break", "audio_alarm_glass_break"),
+    ("car horn", "audio_alarm_car_horn"),
+    ("speech", "audio_alarm_speak"),
+    ("bark", "audio_alarm_bark"),
 )
 
 
@@ -92,7 +98,7 @@ def _extract_source_values(alarm: Mapping[str, Any], query: Mapping[str, str]) -
         if isinstance(item, str):
             values.append(item)
         elif isinstance(item, Mapping):
-            for field in ("source", "key", "type", "name"):
+            for field in ("source", "key", "type", "name", "device"):
                 value = _string_or_none(item.get(field))
                 if value:
                     values.append(value)
@@ -100,11 +106,7 @@ def _extract_source_values(alarm: Mapping[str, Any], query: Mapping[str, str]) -
     for item in alarm.get("conditions", []) or []:
         if isinstance(item, Mapping):
             condition_value = item.get("condition")
-            condition = (
-                condition_value
-                if isinstance(condition_value, Mapping)
-                else item
-            )
+            condition = condition_value if isinstance(condition_value, Mapping) else item
             for field in ("source", "key", "type", "name"):
                 value = _string_or_none(condition.get(field))
                 if value:
@@ -153,15 +155,23 @@ def _normalize_detection(value: str) -> str | None:
 def _extract_device_ids(alarm: Mapping[str, Any], query: Mapping[str, str]) -> list[str]:
     device_ids: list[str] = []
 
-    for item in alarm.get("triggers", []) or []:
+    for item in alarm.get("sources", []) or []:
         if isinstance(item, Mapping):
             device = _string_or_none(item.get("device"))
             if device:
                 device_ids.append(device)
 
-    query_device = _string_or_none(query.get("device"))
-    if query_device:
-        device_ids.append(query_device)
+    for item in alarm.get("triggers", []) or []:
+        if isinstance(item, Mapping):
+            for field in ("device", "deviceId", "mac"):
+                device = _string_or_none(item.get(field))
+                if device:
+                    device_ids.append(device)
+
+    for field in ("device", "device_id", "deviceId", "camera"):
+        query_device = _string_or_none(query.get(field))
+        if query_device:
+            device_ids.append(query_device)
 
     return _unique(device_ids)
 

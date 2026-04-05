@@ -7,7 +7,7 @@ from typing import Any
 
 from aiohttp.web import Request, Response, json_response
 
-from .const import DOMAIN, EVENT_DETECTION, EVENT_WEBHOOK
+from .const import CONF_WEBHOOK_ID, DOMAIN, EVENT_DETECTION, EVENT_WEBHOOK
 from .normalize import normalize_webhook_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,11 +16,18 @@ _LOGGER = logging.getLogger(__name__)
 async def async_handle_protect_webhook(hass: Any, webhook_id: str, request: Request) -> Response:
     payload = await _read_payload(request)
     normalized = normalize_webhook_payload(payload, request.query)
+    runtime = _runtime_for_webhook(hass, webhook_id)
+    matched_cameras = []
+    if runtime is not None:
+        matched_cameras = await runtime.async_process_webhook(normalized)
+
     event_data = {
         **normalized,
         "webhook_id": webhook_id,
         "method": request.method,
         "path": str(request.rel_url),
+        "matched_camera_names": [camera.get("name") for camera in matched_cameras],
+        "matched_camera_keys": [camera.get("camera_key") for camera in matched_cameras],
         "headers": {
             key: value
             for key, value in request.headers.items()
@@ -42,6 +49,7 @@ async def async_handle_protect_webhook(hass: Any, webhook_id: str, request: Requ
             "status": HTTPStatus.OK,
             "primary_detection_type": normalized["primary_detection_type"],
             "detection_types": normalized["detection_types"],
+            "matched_cameras": [camera.get("name") for camera in matched_cameras],
         },
         status=HTTPStatus.OK,
     )
@@ -65,3 +73,10 @@ async def _read_payload(request: Request) -> dict[str, Any]:
         return loaded if isinstance(loaded, dict) else {"raw_body": loaded}
 
     return {"raw_body": body}
+
+
+def _runtime_for_webhook(hass: Any, webhook_id: str) -> Any | None:
+    for runtime in hass.data.get(DOMAIN, {}).values():
+        if runtime.entry.data.get(CONF_WEBHOOK_ID) == webhook_id:
+            return runtime
+    return None
