@@ -11,6 +11,25 @@
           "verify_ssl": "Verify SSL certificate",
           "webhook_base_url": "Webhook base URL override"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure UniFi Protect",
+        "description": "Update the bridge connection settings. Leave the password empty to keep the current password.",
+        "data": {
+          "host": "Protect host",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify SSL certificate",
+          "webhook_base_url": "Webhook base URL override"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect UniFi Protect",
+        "description": "Update the credentials for {host}. Leave the password empty to keep the current password.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -19,7 +38,10 @@
       "unknown": "Unexpected error while setting up the bridge."
     },
     "abort": {
-      "already_configured": "This UniFi Protect system is already configured."
+      "already_configured": "This UniFi Protect system is already configured.",
+      "reauth_successful": "Reauthentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful.",
+      "wrong_account": "The provided settings point to a different UniFi Protect system."
     }
   }
 }

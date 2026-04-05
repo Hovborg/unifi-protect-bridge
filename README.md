@@ -57,6 +57,8 @@ After setup, the integration will:
 - register the webhook endpoint in Home Assistant
 - expose sensors and events automatically
 
+If your Protect host, credentials, or webhook base URL changes later, open the integration in Home Assistant and use **Reconfigure**. Authentication failures will trigger Home Assistant's normal reauthentication flow.
+
 ## What You Get
 
 ### Automatic Protect setup
@@ -90,10 +92,12 @@ The current automatic coverage focuses on the normal Protect 7.x camera detectio
 - `vehicle`
 - `animal`
 - `package`
+- `license_plate_of_interest`
 - `ring`
 - `face_unknown`
 - `face_known`
 - `face_of_interest`
+- `audio_alarm_baby_cry`
 - `audio_alarm_bark`
 - `audio_alarm_burglar`
 - `audio_alarm_car_horn`

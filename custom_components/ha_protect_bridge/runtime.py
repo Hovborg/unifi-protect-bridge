@@ -138,11 +138,16 @@ class HaProtectBridgeRuntime:
     def iter_sensor_specs(self) -> list[BridgeSensorSpec]:
         return list(self._sensor_specs.values())
 
+    def has_sensor_spec(self, sensor_key: str) -> bool:
+        return sensor_key in self._sensor_specs
+
     def get_sensor_state(self, sensor_key: str) -> datetime | None:
         return self._timestamps.get(sensor_key)
 
     def get_sensor_attributes(self, sensor_key: str) -> dict[str, Any]:
-        spec = self._sensor_specs[sensor_key]
+        spec = self._sensor_specs.get(sensor_key)
+        if spec is None:
+            return {}
         attributes: dict[str, Any] = {
             "source": spec.source,
             "source_label": humanize_source(spec.source),
@@ -287,6 +292,12 @@ class HaProtectBridgeRuntime:
                     source=source,
                     camera_key=camera["camera_key"],
                 )
+
+        active_keys = set(sensor_specs)
+        for stale_key in list(self._timestamps):
+            if stale_key not in active_keys:
+                self._timestamps.pop(stale_key, None)
+                self._event_summaries.pop(stale_key, None)
 
         self._sensor_specs = sensor_specs
 

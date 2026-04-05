@@ -24,8 +24,8 @@ def test_build_camera_catalog_maps_normal_camera_and_doorbell_capabilities() -> 
                     "name": "Kitchen",
                     "featureFlags": {"isDoorbell": False},
                     "smartDetectSettings": {
-                        "objectTypes": ["person", "vehicle", "animal"],
-                        "audioTypes": ["alrmSmoke", "alrmGlassBreak"],
+                        "objectTypes": ["person", "vehicle", "animal", "licensePlate"],
+                        "audioTypes": ["alrmSmoke", "alrmGlassBreak", "alrmBabyCry"],
                     },
                 },
             ],
@@ -40,10 +40,12 @@ def test_build_camera_catalog_maps_normal_camera_and_doorbell_capabilities() -> 
         "vehicle",
         "animal",
         "package",
+        "license_plate_of_interest",
         "ring",
         "face_unknown",
         "face_known",
         "face_of_interest",
+        "audio_alarm_baby_cry",
         "audio_alarm_glass_break",
         "audio_alarm_smoke",
     ]
@@ -59,6 +61,18 @@ def test_build_camera_catalog_maps_normal_camera_and_doorbell_capabilities() -> 
         "face_unknown",
         "face_known",
         "face_of_interest",
+    ]
+
+    kitchen = next(camera for camera in catalog["cameras"] if camera["camera_id"] == "cam-kitchen")
+    assert kitchen["supported_sources"] == [
+        "motion",
+        "person",
+        "vehicle",
+        "animal",
+        "license_plate_of_interest",
+        "audio_alarm_baby_cry",
+        "audio_alarm_glass_break",
+        "audio_alarm_smoke",
     ]
 
 

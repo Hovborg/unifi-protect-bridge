@@ -10,11 +10,13 @@ _OBJECT_TYPE_TO_SOURCES = {
     "vehicle": ("vehicle",),
     "animal": ("animal",),
     "package": ("package",),
+    "licenseplate": ("license_plate_of_interest",),
     "face": ("face_unknown", "face_known", "face_of_interest"),
 }
 
 _AUDIO_TYPE_TO_SOURCE = {
     "alrmbark": "audio_alarm_bark",
+    "alrmbabycry": "audio_alarm_baby_cry",
     "alrmburglar": "audio_alarm_burglar",
     "alrmcarhorn": "audio_alarm_car_horn",
     "alrmcmonx": "audio_alarm_co",
@@ -114,7 +116,7 @@ def _camera_sources(camera: Mapping[str, Any]) -> list[str]:
     smart_detect_settings = camera.get("smartDetectSettings") or {}
 
     for object_type in smart_detect_settings.get("objectTypes") or []:
-        sources.extend(_OBJECT_TYPE_TO_SOURCES.get(str(object_type), ()))
+        sources.extend(_object_type_to_sources(object_type))
 
     if bool((camera.get("featureFlags") or {}).get("isDoorbell")):
         sources.append("ring")
@@ -133,6 +135,12 @@ def _audio_type_to_source(value: Any) -> str | None:
     if source in KNOWN_DETECTION_TYPES:
         return source
     return None
+
+
+def _object_type_to_sources(value: Any) -> tuple[str, ...]:
+    normalized = "".join(character for character in str(value).lower() if character.isalnum())
+    sources = _OBJECT_TYPE_TO_SOURCES.get(normalized, ())
+    return tuple(source for source in sources if source in KNOWN_DETECTION_TYPES)
 
 
 def _camera_name(camera: Mapping[str, Any], device_mac: str | None, index: int) -> str:

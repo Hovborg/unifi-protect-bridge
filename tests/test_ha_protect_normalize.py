@@ -71,12 +71,49 @@ def test_normalize_audio_alarm_alias() -> None:
     assert normalized["device_ids"] == ["84784828725C"]
 
 
+def test_normalize_license_plate_alias() -> None:
+    normalized = normalize_webhook_payload(
+        {},
+        {
+            "alarm": "Driveway detected a license plate",
+            "source": "licenseplate",
+            "device": "84784828725C",
+        },
+    )
+
+    assert normalized["primary_detection_type"] == "license_plate_of_interest"
+    assert normalized["detection_types"] == ["license_plate_of_interest"]
+    assert normalized["device_ids"] == ["84784828725C"]
+
+
+def test_normalize_audio_baby_cry_alias() -> None:
+    normalized = normalize_webhook_payload(
+        {},
+        {
+            "alarm": "Nursery heard baby cry",
+            "source": "baby_cry",
+            "device": "84784828725C",
+        },
+    )
+
+    assert normalized["primary_detection_type"] == "audio_alarm_baby_cry"
+    assert normalized["detection_types"] == ["audio_alarm_baby_cry"]
+    assert normalized["device_ids"] == ["84784828725C"]
+
+
 def test_normalize_smart_detect_event_payload() -> None:
     normalized = normalize_event_payload(
         {
             "type": "smartDetectZone",
             "camera": "586ab7c2bb6423c3fdd47e95",
-            "smartDetectTypes": ["person", "vehicle", "face", "alrmSmoke"],
+            "smartDetectTypes": [
+                "person",
+                "vehicle",
+                "face",
+                "licensePlate",
+                "alrmSmoke",
+                "alrmBabyCry",
+            ],
             "timestamp": 1763816532675,
         }
     )
@@ -84,7 +121,9 @@ def test_normalize_smart_detect_event_payload() -> None:
     assert normalized["detection_types"] == [
         "person",
         "vehicle",
+        "license_plate_of_interest",
         "audio_alarm_smoke",
+        "audio_alarm_baby_cry",
     ]
     assert normalized["device_ids"] == ["586ab7c2bb6423c3fdd47e95"]
     assert normalized["timestamp_ms"] == 1763816532675

@@ -13,6 +13,7 @@ _ALIASES = {
     "pets": "animal",
     "car": "vehicle",
     "cars": "vehicle",
+    "license_plate": "license_plate_of_interest",
     "licenseplate": "license_plate_of_interest",
     "licence_plate": "license_plate_of_interest",
     "license_plates": "license_plate_of_interest",
@@ -36,6 +37,9 @@ _ALIASES = {
     "siren": "audio_alarm_siren",
     "speech": "audio_alarm_speak",
     "bark": "audio_alarm_bark",
+    "babycry": "audio_alarm_baby_cry",
+    "baby_cry": "audio_alarm_baby_cry",
+    "alrmbabycry": "audio_alarm_baby_cry",
 }
 
 _NAME_HINTS = (
@@ -43,6 +47,8 @@ _NAME_HINTS = (
     ("known face", "face_known"),
     ("unknown face", "face_unknown"),
     ("license plate", "license_plate_of_interest"),
+    ("baby cry", "audio_alarm_baby_cry"),
+    ("crying baby", "audio_alarm_baby_cry"),
     ("doorbell ring", "ring"),
     ("doorbell", "ring"),
     ("vehicle", "vehicle"),
@@ -67,6 +73,8 @@ _SMART_EVENT_TYPE_TO_DETECTIONS = {
     "vehicle": ("vehicle",),
     "animal": ("animal",),
     "package": ("package",),
+    "licenseplate": ("license_plate_of_interest",),
+    "alrmbabycry": ("audio_alarm_baby_cry",),
     "alrmbark": ("audio_alarm_bark",),
     "alrmburglar": ("audio_alarm_burglar",),
     "alrmcarhorn": ("audio_alarm_car_horn",),
