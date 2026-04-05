@@ -1,0 +1,3 @@
+show_setup_info:
+  name: Show setup info
+  description: Show a persistent notification with the generated HA webhook URL and recommended UniFi Protect Alarm Manager settings.

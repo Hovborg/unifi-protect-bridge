@@ -11,8 +11,24 @@ This repository now focuses first on `ha_protect_bridge`:
 - a HACS-style Home Assistant custom integration
 - webhook ingestion from UniFi Protect Alarm Manager
 - automatic Home Assistant events for motion, person, animal, vehicle, package, and related detections
+- automatic HA-side webhook generation and setup info inside Home Assistant
 
 Shared CLI/core clients are still useful, but they should be split out later into a separate package/repository if we want both a clean HACS experience and reusable Python tooling.
+
+## What is automatic right now
+
+- the integration generates its own Home Assistant webhook endpoint
+- the integration exposes setup info via persistent notification and service
+- the integration exposes webhook details via a diagnostic sensor
+- HA automations can react directly to typed events like `ha_protect_bridge_person` or `ha_protect_bridge_animal`
+
+## What is not fully automatic yet
+
+I did not find an official Ubiquiti API document for creating Protect Alarm Manager webhook actions automatically. So the supported path is currently:
+
+- auto-generate the HA destination URL
+- create the UniFi Protect Webhook action once in Alarm Manager
+- let HA handle the rest automatically
 
 ## Why split the architecture
 
@@ -27,8 +43,11 @@ Official sources point in this direction:
 - HACS metadata via `hacs.json`
 - a custom integration scaffold in `custom_components/ha_protect_bridge/`
 - webhook setup via Home Assistant webhook config flow
+- setup helper service and notification inside Home Assistant
+- diagnostic sensor for webhook details
 - payload normalization for Protect Alarm Manager motion/object detections
 - Home Assistant event firing for automations
+- an example automation blueprint
 
 ## Event model
 

@@ -1,0 +1,29 @@
+blueprint:
+  name: HA Protect Bridge - React To Detection
+  description: React to a selected HA Protect Bridge detection event.
+  domain: automation
+  input:
+    detection_event:
+      name: Detection event
+      selector:
+        select:
+          options:
+            - ha_protect_bridge_person
+            - ha_protect_bridge_animal
+            - ha_protect_bridge_vehicle
+            - ha_protect_bridge_package
+            - ha_protect_bridge_motion
+            - ha_protect_bridge_line_crossing
+            - ha_protect_bridge_detection
+    actions:
+      name: Actions
+      selector:
+        action: {}
+
+mode: single
+
+triggers:
+  - trigger: event
+    event_type: !input detection_event
+
+actions: !input actions

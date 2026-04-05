@@ -15,6 +15,17 @@ The gap this bridge is trying to close is different:
 - one place to normalize Protect webhook payloads for person, animal, vehicle, package, motion and related detections
 - easier future extension toward cross-system workflows
 
+## What is automatic now
+
+- the Home Assistant webhook endpoint is generated automatically by the integration
+- the integration shows the setup info in a persistent notification
+- the integration exposes webhook details through a diagnostic sensor
+- typed HA events are fired automatically when recognized payloads arrive
+
+## What is not fully automatic yet
+
+Based on the official docs reviewed on 5 April 2026, I did not find an officially documented API for creating Protect Alarm Manager webhook actions automatically from this integration. The supported path in the docs still appears to be creating the Webhook action in the UniFi UI.
+
 ## Initial event contract
 
 Generic events:
@@ -31,6 +42,13 @@ Typed events:
 - `ha_protect_bridge_package`
 - `ha_protect_bridge_line_crossing`
 - additional typed events when recognized from payloads
+
+## Setup helpers inside Home Assistant
+
+- Service: `ha_protect_bridge.show_setup_info`
+- Diagnostic sensor with webhook URL/path and supported detection types
+
+The service recreates the setup notification, and the sensor exposes the generated webhook URL/path and supported detection types.
 
 ## Example automation shape
 
@@ -49,7 +67,7 @@ actions:
 
 ## Important implementation note
 
-The official Ubiquiti webhook article shows a generic JSON example for motion. The broader Protect trigger categories are documented in Alarm Manager docs. That means some payload interpretation for person/animal/package-specific events is still an inference from those official docs plus the structured webhook format.
+The official Ubiquiti webhook article shows a generic JSON example for motion. The broader Protect trigger categories are documented in Alarm Manager docs. That means some payload interpretation for person, animal, package, or vehicle specific events is still an inference from those official docs plus the structured webhook format.
 
 We should therefore:
 

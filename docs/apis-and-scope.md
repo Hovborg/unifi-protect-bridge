@@ -19,6 +19,15 @@ Specifically:
 - Protect Alarm Manager webhook ingestion
 - normalized HA events for motion, person, animal, vehicle, package, and related triggers
 - a HACS-friendly custom integration structure
+- generated HA-side webhook URLs and setup helpers inside Home Assistant
+
+## Current automation limit
+
+I did not find an official Ubiquiti developer document for creating Protect Alarm Manager webhook actions automatically via API. The official Help Center material I found documents creating webhook actions in the UniFi UI. So the current supported design is:
+
+- automatic webhook generation on the HA side
+- manual one-time webhook action creation in UniFi Protect Alarm Manager
+- automatic HA event handling after that
 
 ## What should move elsewhere later
 
