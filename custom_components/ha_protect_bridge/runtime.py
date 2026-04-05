@@ -101,6 +101,7 @@ class HaProtectBridgeRuntime:
             automations = await self._api.async_get_automations()
             await self._async_sync_managed_automations(automations)
             self._rebuild_sensor_specs()
+            self._seed_timestamps_from_catalog()
             await self._async_backfill_recent_events()
             self.last_sync_at = datetime.now(UTC)
             self.last_sync_error = None
@@ -306,6 +307,32 @@ class HaProtectBridgeRuntime:
                 continue
             timestamp = _timestamp_from_normalized(normalized)
             self._apply_normalized_event(normalized, timestamp)
+
+    def _seed_timestamps_from_catalog(self) -> None:
+        for camera in self.catalog.get("cameras") or []:
+            for source, key in (("motion", "last_motion_ms"), ("ring", "last_ring_ms")):
+                timestamp_ms = camera.get(key)
+                if not timestamp_ms:
+                    continue
+                device_id = (
+                    camera.get("camera_id")
+                    or camera.get("device_mac")
+                    or camera["camera_key"]
+                )
+                normalized = {
+                    "alarm_name": f"bootstrap_{source}",
+                    "detection_types": [source],
+                    "primary_detection_type": source,
+                    "device_ids": [device_id],
+                    "source_values": [source],
+                    "timestamp_ms": timestamp_ms,
+                    "timestamp_iso": None,
+                    "query": {},
+                    "raw_payload": {"source": "bootstrap"},
+                    "event_types": [],
+                }
+                timestamp = _timestamp_from_normalized(normalized)
+                self._apply_normalized_event(normalized, timestamp)
 
     def _apply_normalized_event(
         self,

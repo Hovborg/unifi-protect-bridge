@@ -10,6 +10,8 @@ def test_build_camera_catalog_maps_normal_camera_and_doorbell_capabilities() -> 
                     "id": "cam-front",
                     "mac": "1C:6A:1B:0E:81:73",
                     "name": "Front Door",
+                    "lastMotion": 1234567890,
+                    "lastRing": 1234567999,
                     "featureFlags": {"isDoorbell": True},
                     "smartDetectSettings": {
                         "objectTypes": ["person", "package", "face"],
@@ -47,6 +49,8 @@ def test_build_camera_catalog_maps_normal_camera_and_doorbell_capabilities() -> 
     ]
 
     front_door = next(camera for camera in catalog["cameras"] if camera["camera_id"] == "cam-front")
+    assert front_door["last_motion_ms"] == 1234567890
+    assert front_door["last_ring_ms"] == 1234567999
     assert front_door["supported_sources"] == [
         "motion",
         "person",

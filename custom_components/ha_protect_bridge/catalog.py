@@ -49,6 +49,8 @@ def build_camera_catalog(bootstrap: Mapping[str, Any] | None) -> dict[str, Any]:
             "name": name,
             "model": _string(raw_camera.get("marketName")) or "UniFi Protect Camera",
             "is_doorbell": bool((raw_camera.get("featureFlags") or {}).get("isDoorbell")),
+            "last_motion_ms": _int_or_none(raw_camera.get("lastMotion")),
+            "last_ring_ms": _int_or_none(raw_camera.get("lastRing")),
             "supported_sources": supported_sources,
         }
         cameras.append(camera)
@@ -152,3 +154,12 @@ def _string(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
