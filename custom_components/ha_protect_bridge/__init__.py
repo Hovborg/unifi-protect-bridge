@@ -3,6 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+try:
+    from homeassistant.helpers import config_validation as cv
+except ModuleNotFoundError:  # pragma: no cover - local unit tests do not install HA
+    cv = None
+
 from .const import (
     CONF_WEBHOOK_ID,
     DOMAIN,
@@ -16,6 +21,7 @@ from .const import (
 from .setup_info import build_setup_message
 
 _LOGGER = logging.getLogger(__name__)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN) if cv else None
 
 
 async def async_setup(hass: Any, config: dict[str, Any]) -> bool:

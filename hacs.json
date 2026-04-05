@@ -1,6 +1,5 @@
 {
   "name": "HA Protect Bridge",
-  "domains": ["ha_protect_bridge"],
   "homeassistant": "2026.3.0",
   "render_readme": true
 }
