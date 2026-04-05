@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 from custom_components.ha_protect_bridge.const import DOMAIN
 from custom_components.ha_protect_bridge.runtime import BridgeSensorSpec
-from custom_components.ha_protect_bridge.sensor import HaProtectBridgeTimestampSensor, async_setup_entry
+from custom_components.ha_protect_bridge.sensor import (
+    HaProtectBridgeTimestampSensor,
+    async_setup_entry,
+)
 
 
 class FakeRuntime:

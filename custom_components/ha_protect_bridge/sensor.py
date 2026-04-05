@@ -30,7 +30,7 @@ async def async_setup_entry(hass: Any, entry: Any, async_add_entities: Any) -> N
 def _build_new_timestamp_entities(
     runtime: HaProtectBridgeRuntime,
     known_sensor_keys: set[str],
-) -> list["HaProtectBridgeTimestampSensor"]:
+) -> list[HaProtectBridgeTimestampSensor]:
     new_entities: list[HaProtectBridgeTimestampSensor] = []
     for spec in runtime.iter_sensor_specs():
         if spec.key in known_sensor_keys:

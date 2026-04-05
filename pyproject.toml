@@ -16,8 +16,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "aiohttp>=3.12,<4",
     "pytest>=8.4,<9",
     "ruff>=0.12,<0.13",
+    "voluptuous>=0.15,<0.16",
 ]
 
 [project.scripts]
