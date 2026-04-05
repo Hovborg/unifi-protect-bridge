@@ -1,17 +1,13 @@
-Læs `AI_CONTEXT.md` for projektbeskrivelse og regler.
-Læs `/mnt/c/codex_projekts/.ai/infrastructure.md` for delt system-kontekst.
+# Gemini CLI
 
-# Gemini CLI - Sitebridge
+## Start Here
 
-## Første Filer
-
-- `AI_CONTEXT.md`
 - `README.md`
 - `custom_components/ha_protect_bridge/manifest.json`
-- `docs/ha-protect-bridge.md`
+- `custom_components/ha_protect_bridge/config_flow.py`
+- `custom_components/ha_protect_bridge/runtime.py`
 
-## Noter
+## Notes
 
-- Repoet fokuserer nu på HA Protect bridge som custom integration.
-- Brug officielle Ubiquiti- og Home Assistant-kilder ved research.
-- Brug `hass-cli` til HA på denne host.
+- Focus on the Home Assistant custom integration first.
+- Prefer official Home Assistant and Ubiquiti sources for research.

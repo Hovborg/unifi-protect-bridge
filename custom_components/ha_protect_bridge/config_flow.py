@@ -56,7 +56,7 @@ def _build_schema(user_input: dict[str, Any] | None) -> vol.Schema:
     user_input = user_input or {}
     return vol.Schema(
         {
-            vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "192.168.1.1")): str,
+            vol.Required(CONF_HOST, default=user_input.get(CONF_HOST, "")): str,
             vol.Required(CONF_USERNAME, default=user_input.get(CONF_USERNAME, "")): str,
             vol.Required(CONF_PASSWORD, default=user_input.get(CONF_PASSWORD, "")): str,
             vol.Optional(

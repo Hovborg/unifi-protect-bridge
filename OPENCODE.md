@@ -1,16 +1,13 @@
-Læs `AI_CONTEXT.md` for projektbeskrivelse og regler.
-Læs `/mnt/c/codex_projekts/.ai/infrastructure.md` for delt system-kontekst.
+# OpenCode
 
-# OpenCode - Sitebridge
+## Start Here
 
-## Første Filer
-
-- `AI_CONTEXT.md`
 - `README.md`
 - `custom_components/ha_protect_bridge/`
-- `docs/repo-split.md`
+- `custom_components/ha_protect_bridge/runtime.py`
+- `custom_components/ha_protect_bridge/webhook.py`
 
-## Noter
+## Notes
 
-- Projektet er nu primært en uofficiel HA/Protect bridge.
-- HACS-struktur har prioritet over generisk CLI-struktur i denne repo.
+- The main deliverable in this repository is the Home Assistant integration.
+- Keep the HACS install path and runtime behavior simple and explicit.
