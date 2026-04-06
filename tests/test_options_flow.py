@@ -18,13 +18,11 @@ def test_config_flow_exposes_options_flow_handler() -> None:
     handler = HaProtectBridgeConfigFlow.async_get_options_flow(entry)
 
     assert isinstance(handler, HaProtectBridgeOptionsFlowHandler)
-    assert handler.config_entry is entry
 
 
 def test_options_flow_updates_backfill_limit() -> None:
-    handler = HaProtectBridgeOptionsFlowHandler(
-        SimpleNamespace(options={CONF_EVENT_BACKFILL_LIMIT: 100})
-    )
+    handler = HaProtectBridgeOptionsFlowHandler()
+    handler.config_entry = SimpleNamespace(options={CONF_EVENT_BACKFILL_LIMIT: 100})
 
     result = asyncio.run(
         handler.async_step_init(
@@ -39,7 +37,8 @@ def test_options_flow_updates_backfill_limit() -> None:
 
 
 def test_options_flow_clamps_invalid_backfill_limit() -> None:
-    handler = HaProtectBridgeOptionsFlowHandler(SimpleNamespace(options={}))
+    handler = HaProtectBridgeOptionsFlowHandler()
+    handler.config_entry = SimpleNamespace(options={})
 
     result = asyncio.run(
         handler.async_step_init(

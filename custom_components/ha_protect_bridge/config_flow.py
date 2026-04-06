@@ -29,8 +29,8 @@ class HaProtectBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: Any) -> HaProtectBridgeOptionsFlowHandler:
-        return HaProtectBridgeOptionsFlowHandler(config_entry)
+    def async_get_options_flow(_config_entry: Any) -> HaProtectBridgeOptionsFlowHandler:
+        return HaProtectBridgeOptionsFlowHandler()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> Any:
         return await self._async_step_configure_user(user_input)
@@ -259,9 +259,6 @@ def _clear_webhook_base_url(user_input: Mapping[str, Any]) -> bool:
 
 
 class HaProtectBridgeOptionsFlowHandler(config_entries.OptionsFlowWithReload):
-    def __init__(self, config_entry: Any) -> None:
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> Any:
         if user_input is not None:
             return self.async_create_entry(
