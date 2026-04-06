@@ -7,34 +7,94 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Hovborg/sitebridge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Hovborg/sitebridge/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI"></a>
-  <a href="https://github.com/Hovborg/sitebridge/actions/workflows/hassfest.yml"><img src="https://img.shields.io/github/actions/workflow/status/Hovborg/sitebridge/hassfest.yml?branch=main&label=Hassfest&style=for-the-badge" alt="Hassfest"></a>
-  <img src="https://img.shields.io/badge/HACS-Integration-41BDF5?style=for-the-badge" alt="HACS Integration">
-  <img src="https://img.shields.io/badge/Home%20Assistant-2026.3%2B-18BCF2?style=for-the-badge" alt="Home Assistant 2026.3+">
-  <img src="https://img.shields.io/badge/UniFi%20Protect-Auto%20Provisioned-2EBD59?style=for-the-badge" alt="UniFi Protect auto provisioned">
+  <a href="https://github.com/Hovborg/sitebridge/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Hovborg/sitebridge?display_name=tag&style=for-the-badge" alt="Latest Release">
+  </a>
+  <a href="https://github.com/Hovborg/sitebridge/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/sitebridge/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI">
+  </a>
+  <a href="https://github.com/Hovborg/sitebridge/actions/workflows/hassfest.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/sitebridge/hassfest.yml?branch=main&label=Hassfest&style=for-the-badge" alt="Hassfest">
+  </a>
+  <a href="https://github.com/Hovborg/sitebridge/actions/workflows/hacs.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/sitebridge/hacs.yml?branch=main&label=HACS%20Validation&style=for-the-badge" alt="HACS Validation">
+  </a>
 </p>
 
-A Home Assistant custom integration for UniFi Protect that discovers your cameras, creates the needed Protect webhook automations automatically, and exposes detection sensors in Home Assistant.
+<p align="center">
+  <img src="https://img.shields.io/badge/HACS-Integration-41BDF5?style=for-the-badge" alt="HACS Integration">
+  <img src="https://img.shields.io/badge/Home%20Assistant-2026.3%2B-18BCF2?style=for-the-badge" alt="Home Assistant 2026.3+">
+  <img src="https://img.shields.io/badge/UniFi%20Protect-Local%20Push-2EBD59?style=for-the-badge" alt="UniFi Protect Local Push">
+  <img src="https://img.shields.io/badge/Setup-Config%20Flow-1F6FEB?style=for-the-badge" alt="Config Flow">
+</p>
 
-Instead of building Alarm Manager webhook rules by hand, you install the integration, add your Protect host, and let the bridge provision the Protect side automatically.
+<p align="center">
+  <strong>UniFi Protect to Home Assistant, without manual Alarm Manager rule sprawl.</strong>
+</p>
+
+<p align="center">
+  HA Protect Bridge discovers your cameras, provisions the Protect webhook automations for you,
+  and exposes clean detection sensors and typed events inside Home Assistant.
+</p>
+
+<p align="center">
+  <a href="#why-this-project">Why</a> •
+  <a href="#how-it-works">How It Works</a> •
+  <a href="#install-with-hacs">Install</a> •
+  <a href="#configure-it">Configure</a> •
+  <a href="#supported-detections">Detections</a> •
+  <a href="#troubleshooting">Troubleshooting</a> •
+  <a href="#development">Development</a>
+</p>
 
 > [!TIP]
-> Click **Open in HACS** above, or follow the short install guide below.
+> If you want the shortest path, click **Open in HACS**, install the integration, restart Home Assistant, and add **HA Protect Bridge** from **Settings -> Devices & services**.
+
+## Why This Project
+
+UniFi Protect can already send webhook-based automations, but maintaining those rules by hand gets tedious fast when you have multiple cameras and multiple detection types. HA Protect Bridge turns that into a normal Home Assistant integration flow and keeps the Protect side aligned automatically.
+
+| Auto-provisions Protect | Feels native in Home Assistant | Built for real debugging |
+| --- | --- | --- |
+| Creates and refreshes managed Protect webhook automations for supported detections. | HACS install, config flow, reconfigure, reauth, options flow, and services. | Supports Home Assistant diagnostics with credentials, host details, and webhook secrets redacted. |
+
+## How It Works
+
+```mermaid
+flowchart LR
+    Protect[UniFi Protect]
+    Bridge[HA Protect Bridge]
+    Automations[Managed Protect webhook automations]
+    Webhook[Home Assistant webhook endpoint]
+    Sensors[Timestamp sensors]
+    Events[Typed HA events]
+
+    Bridge --> Automations
+    Protect --> Automations
+    Automations --> Webhook
+    Webhook --> Bridge
+    Bridge --> Sensors
+    Bridge --> Events
+```
+
+After setup, the integration will:
+
+- log in to Protect
+- inspect cameras and their supported detections
+- create or replace managed Protect automations when needed
+- register a webhook endpoint in Home Assistant
+- normalize incoming payloads into sensors and events
 
 ## Install With HACS
 
 1. Open **HACS** in Home Assistant.
-2. Open the top-right menu.
-3. Select **Custom repositories**.
-4. Add this repository URL:
-   `https://github.com/Hovborg/sitebridge`
-5. Choose category: **Integration**.
-6. Click **Add**.
-7. Open **HA Protect Bridge** in HACS.
-8. Click **Download**.
-9. Restart Home Assistant.
-10. Go to **Settings -> Devices & services -> Add Integration**.
-11. Search for **HA Protect Bridge**.
+2. Open the top-right menu and select **Custom repositories**.
+3. Add `https://github.com/Hovborg/sitebridge`.
+4. Choose category **Integration**.
+5. Open **HA Protect Bridge** in HACS and click **Download**.
+6. Restart Home Assistant.
+7. Go to **Settings -> Devices & services -> Add Integration**.
+8. Search for **HA Protect Bridge**.
 
 > [!NOTE]
 > If the integration does not show up after restart, refresh the browser and try again.
@@ -47,73 +107,97 @@ When you add the integration, Home Assistant asks for:
 - `Username`
 - `Password`
 - `Verify SSL certificate`
-- `Webhook base URL override` only if Protect cannot reach Home Assistant's normal URL
+- `Webhook base URL override` if Protect cannot reach Home Assistant's normal URL
 
-After setup, the integration will:
+Once connected, Home Assistant will manage the Protect side for you.
 
-- log in to Protect
-- inspect cameras and supported detections
-- create or refresh managed Protect automations
-- register the webhook endpoint in Home Assistant
-- expose sensors and events automatically
+You can later use:
 
-If your Protect host, credentials, or webhook base URL changes later, open the integration in Home Assistant and use **Reconfigure**. Authentication failures will trigger Home Assistant's normal reauthentication flow.
+- **Reconfigure** to change host, credentials, SSL choice, or webhook base URL
+- **Reauthenticate** if credentials stop working
+- **Options** to tune startup behavior
 
-The integration also exposes an options flow for tuning startup behavior. Right now the main option is **Initial event backfill limit**, which controls how many recent Protect events are fetched during initialization and resync. Set it to `0` to disable backfill entirely.
+The most important option today is **Initial event backfill limit**:
 
-If you need to debug a setup, Home Assistant's normal **Download diagnostics** action is supported for this integration and redacts credentials, host details, and webhook secrets automatically.
+- allowed range is `0` to `100`
+- `0` disables event backfill entirely
+- lower values reduce startup and resync load
+
+If you need a stable low-load setup, start with `0` and increase later only if you actually want historical timestamps filled in at startup.
 
 ## What You Get
 
-### Automatic Protect setup
+### On the Protect side
 
-- no manual Alarm Manager webhook rules for the normal detection types
-- one managed Protect automation per supported detection source
-- automatic re-sync when the integration is refreshed
+- one managed webhook automation per supported detection source
+- automatic refresh when camera capabilities change
+- consistent bridge-owned automation naming
 
-### Automatic Home Assistant entities
+### In Home Assistant
 
 - one bridge status sensor
 - one global timestamp sensor per managed detection type
-- one per-camera timestamp sensor for each supported detection type
+- one per-camera timestamp sensor for every supported source that camera exposes
 - typed HA events for every incoming detection
+- services for inspection and resync
 
-Examples:
+The integration registers these services:
 
-- `sensor.bridge_status`
-- `sensor.last_person`
-- `sensor.front_door_last_ring`
-- `sensor.driveway_last_vehicle`
+- `ha_protect_bridge.show_setup_info`
+- `ha_protect_bridge.resync`
+
+Entity IDs depend on your NVR and camera names, but they look like this:
+
+- `sensor.<nvr>_bridge_bridge_status`
+- `sensor.<nvr>_bridge_last_person`
+- `sensor.<camera>_last_ring`
+- `sensor.<camera>_last_vehicle`
 - `ha_protect_bridge_person`
 - `ha_protect_bridge_package`
 
 ## Supported Detections
 
-The current automatic coverage focuses on the normal Protect 7.x camera detections:
+The current automatic coverage focuses on the normal Protect 7.x detection families.
 
-- `motion`
-- `person`
-- `vehicle`
-- `animal`
-- `package`
-- `license_plate_of_interest`
-- `ring`
-- `face_unknown`
-- `face_known`
-- `face_of_interest`
-- `audio_alarm_baby_cry`
-- `audio_alarm_bark`
-- `audio_alarm_burglar`
-- `audio_alarm_car_horn`
-- `audio_alarm_co`
-- `audio_alarm_glass_break`
-- `audio_alarm_siren`
-- `audio_alarm_smoke`
-- `audio_alarm_speak`
+| Group | Detection types |
+| --- | --- |
+| Core | `motion`, `person`, `vehicle`, `animal`, `package` |
+| Doorbell | `ring` |
+| Face | `face_unknown`, `face_known`, `face_of_interest` |
+| License plate | `license_plate_of_interest` |
+| Audio alarms | `audio_alarm_baby_cry`, `audio_alarm_bark`, `audio_alarm_burglar`, `audio_alarm_car_horn`, `audio_alarm_co`, `audio_alarm_glass_break`, `audio_alarm_siren`, `audio_alarm_smoke`, `audio_alarm_speak` |
+
+## Troubleshooting
+
+### Protect cannot reach Home Assistant
+
+Set **Webhook base URL override** in the integration if Protect cannot call Home Assistant using the default generated URL.
+
+### Home Assistant startup feels heavy
+
+Open the integration **Options** and set **Initial event backfill limit** lower, or set it to `0` to disable startup backfill completely.
+
+### You want a clean support dump
+
+Use Home Assistant's normal **Download diagnostics** action on the config entry. The integration redacts:
+
+- username
+- password
+- host
+- webhook id
+- webhook URL details
+
+### You changed cameras or detection capabilities
+
+Call:
+
+- `ha_protect_bridge.resync`
+
+That will rebuild the catalog and refresh managed automations when needed.
 
 ## Manual Install
 
-If you prefer not to use HACS, copy `custom_components/ha_protect_bridge` into your Home Assistant config directory and make sure the final path is:
+If you do not want to use HACS, copy `custom_components/ha_protect_bridge` into your Home Assistant config directory so the final path is:
 
 ```text
 config/custom_components/ha_protect_bridge/
@@ -121,22 +205,20 @@ config/custom_components/ha_protect_bridge/
 
 Then restart Home Assistant and add the integration from **Settings -> Devices & services**.
 
-## HACS Links
+## HACS And GitHub Links
 
+- HACS custom repository docs: <https://www.hacs.xyz/docs/faq/custom_repositories/>
 - HACS download docs: <https://www.hacs.xyz/docs/use/download/download/>
-- HACS custom repositories: <https://www.hacs.xyz/docs/faq/custom_repositories/>
 - My Home Assistant HACS links: <https://www.hacs.xyz/docs/use/my/>
-
-## Why This Exists
-
-UniFi Protect can already send webhook-based automations, but building and maintaining them manually gets messy fast when you have many cameras and multiple detection types. This integration turns that into a normal Home Assistant config flow and keeps the Protect side aligned automatically.
+- Latest GitHub release: <https://github.com/Hovborg/sitebridge/releases/latest>
+- Issue tracker: <https://github.com/Hovborg/sitebridge/issues>
 
 ## Technical Note
 
 > [!IMPORTANT]
 > Automatic provisioning uses UniFi Protect's private `/proxy/protect/api/automations` endpoint.
 >
-> That is what makes zero-manual setup possible, but it also means future Protect updates may require compatibility fixes in this integration.
+> That private API is what makes zero-manual setup possible, but it also means future Protect updates may require compatibility fixes in this integration.
 
 ## Development
 
@@ -149,4 +231,4 @@ ruff check .
 pytest
 ```
 
-For GitHub-specific maintainer tasks, prefer GitHub CLI (`gh`) over email/browser triage when available. In practice that means `gh run list`, `gh run view`, `gh workflow list`, `gh pr status`, and `gh api` for CI, workflow, and repository state inspection, while regular local repository work still uses plain `git`.
+For GitHub-specific maintainer tasks, prefer GitHub CLI (`gh`) over email or browser triage when available. In practice that means `gh run list`, `gh run view`, `gh workflow list`, `gh pr status`, and `gh api` for workflow and repository state inspection, while normal local repository work still uses plain `git`.
