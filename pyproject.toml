@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sitebridge"
-version = "0.2.7"
+version = "0.2.8"
 description = "Home Assistant HACS integration for automatic UniFi Protect webhook provisioning and sensors."
 readme = "README.md"
 requires-python = ">=3.13,<3.15"

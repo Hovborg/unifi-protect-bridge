@@ -80,21 +80,27 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
     try:
         await runtime.async_initialize()
     except ProtectAuthError as err:
-        webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
-        await runtime.async_shutdown()
+        await _async_cleanup_failed_setup(hass, entry, runtime)
         raise ConfigEntryAuthFailed(str(err)) from err
     except ProtectApiError as err:
-        webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
-        await runtime.async_shutdown()
+        await _async_cleanup_failed_setup(hass, entry, runtime)
         raise ConfigEntryNotReady(str(err)) from err
     except Exception as err:
-        webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
-        await runtime.async_shutdown()
+        await _async_cleanup_failed_setup(hass, entry, runtime)
         raise ConfigEntryNotReady(str(err)) from err
 
     entry.runtime_data = runtime
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await async_show_setup_info(hass, runtime)
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        await _async_cleanup_failed_setup(hass, entry, runtime)
+        raise
+
+    try:
+        await async_show_setup_info(hass, runtime)
+    except Exception:
+        _LOGGER.warning("Failed to create HA Protect Bridge setup notification", exc_info=True)
+
     return True
 
 
@@ -125,6 +131,14 @@ async def async_show_setup_info(hass: Any, runtime: Any) -> None:
         title=NAME,
         notification_id=NOTIFICATION_ID,
     )
+
+
+async def _async_cleanup_failed_setup(hass: Any, entry: Any, runtime: Any) -> None:
+    from homeassistant.components import webhook
+
+    webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
+    await runtime.async_shutdown()
+    entry.runtime_data = None
 
 
 def _service_entry(hass: Any, entry_id: str | None) -> Any | None:

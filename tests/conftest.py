@@ -11,10 +11,12 @@ def _install_homeassistant_stubs() -> None:
     homeassistant = ModuleType("homeassistant")
     components = ModuleType("homeassistant.components")
     diagnostics_module = ModuleType("homeassistant.components.diagnostics")
+    persistent_notification = ModuleType("homeassistant.components.persistent_notification")
     webhook = ModuleType("homeassistant.components.webhook")
     sensor_module = ModuleType("homeassistant.components.sensor")
     config_entries = ModuleType("homeassistant.config_entries")
     core = ModuleType("homeassistant.core")
+    exceptions = ModuleType("homeassistant.exceptions")
     helpers = ModuleType("homeassistant.helpers")
     config_validation = ModuleType("homeassistant.helpers.config_validation")
     device_registry = ModuleType("homeassistant.helpers.device_registry")
@@ -178,6 +180,9 @@ def _install_homeassistant_stubs() -> None:
 
     webhook.async_generate_path = lambda webhook_id: f"/api/webhook/{webhook_id}"
     webhook.async_generate_url = lambda _hass, webhook_id: f"http://ha.local/api/webhook/{webhook_id}"
+    webhook.async_register = lambda *args, **kwargs: None
+    webhook.async_unregister = lambda *args, **kwargs: None
+    persistent_notification.async_create = lambda *args, **kwargs: None
     diagnostics_module.async_redact_data = async_redact_data
     config_entries.ConfigFlow = ConfigFlow
     config_entries.OptionsFlow = OptionsFlow
@@ -190,11 +195,21 @@ def _install_homeassistant_stubs() -> None:
     core.CALLBACK_TYPE = object
     core.HomeAssistant = object
     core.callback = callback
+
+    class ConfigEntryAuthFailed(Exception):
+        pass
+
+    class ConfigEntryNotReady(Exception):
+        pass
+
+    exceptions.ConfigEntryAuthFailed = ConfigEntryAuthFailed
+    exceptions.ConfigEntryNotReady = ConfigEntryNotReady
     config_validation.config_entry_only_config_schema = lambda domain: {"domain": domain}
     device_registry.DeviceInfo = DeviceInfo
     entity.EntityCategory = EntityCategory
 
     components.webhook = webhook
+    components.persistent_notification = persistent_notification
     components.diagnostics = diagnostics_module
     components.sensor = sensor_module
     helpers.config_validation = config_validation
@@ -203,15 +218,18 @@ def _install_homeassistant_stubs() -> None:
     homeassistant.components = components
     homeassistant.config_entries = config_entries
     homeassistant.core = core
+    homeassistant.exceptions = exceptions
     homeassistant.helpers = helpers
 
     sys.modules["homeassistant"] = homeassistant
     sys.modules["homeassistant.components"] = components
     sys.modules["homeassistant.components.diagnostics"] = diagnostics_module
+    sys.modules["homeassistant.components.persistent_notification"] = persistent_notification
     sys.modules["homeassistant.components.webhook"] = webhook
     sys.modules["homeassistant.components.sensor"] = sensor_module
     sys.modules["homeassistant.config_entries"] = config_entries
     sys.modules["homeassistant.core"] = core
+    sys.modules["homeassistant.exceptions"] = exceptions
     sys.modules["homeassistant.helpers"] = helpers
     sys.modules["homeassistant.helpers.config_validation"] = config_validation
     sys.modules["homeassistant.helpers.device_registry"] = device_registry

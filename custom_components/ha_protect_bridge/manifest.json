@@ -8,5 +8,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Hovborg/sitebridge/issues",
   "loggers": ["custom_components.ha_protect_bridge"],
-  "version": "0.2.7"
+  "version": "0.2.8"
 }
