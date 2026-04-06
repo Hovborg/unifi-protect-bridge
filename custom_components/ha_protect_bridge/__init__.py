@@ -18,6 +18,7 @@ from .const import (
     SERVICE_SHOW_SETUP_INFO,
     SUPPORTED_METHODS,
 )
+from .entry_runtime import get_entry_runtime
 from .setup_info import build_setup_message
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
             if entry is None:
                 _LOGGER.warning("No %s config entry exists yet", DOMAIN)
                 return
-            runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+            runtime = get_entry_runtime(entry)
             if runtime is None:
                 return
             await async_show_setup_info(hass, runtime)
@@ -46,7 +47,7 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
             if entry is None:
                 _LOGGER.warning("No %s config entry exists yet", DOMAIN)
                 return
-            runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+            runtime = get_entry_runtime(entry)
             if runtime is None:
                 return
             await runtime.async_resync()
@@ -91,7 +92,7 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
         await runtime.async_shutdown()
         raise ConfigEntryNotReady(str(err)) from err
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
+    entry.runtime_data = runtime
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_show_setup_info(hass, runtime)
     return True
@@ -100,13 +101,13 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
 async def async_unload_entry(hass: Any, entry: Any) -> bool:
     from homeassistant.components import webhook
 
-    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    runtime = get_entry_runtime(entry)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         if runtime is not None:
             await runtime.async_shutdown()
+        entry.runtime_data = None
     return unload_ok
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from custom_components.ha_protect_bridge.const import DOMAIN
 from custom_components.ha_protect_bridge.runtime import BridgeSensorSpec
 from custom_components.ha_protect_bridge.sensor import (
     HaProtectBridgeTimestampSensor,
@@ -57,8 +56,9 @@ class FakeRuntime:
 
 
 class FakeEntry:
-    def __init__(self, entry_id: str) -> None:
+    def __init__(self, entry_id: str, runtime) -> None:
         self.entry_id = entry_id
+        self.runtime_data = runtime
         self.unloaders = []
 
     def async_on_unload(self, callback) -> None:
@@ -82,8 +82,8 @@ def test_async_setup_entry_adds_new_timestamp_entities_on_runtime_update() -> No
         camera_key="camera-1",
     )
     runtime = FakeRuntime([motion])
-    entry = FakeEntry(runtime.entry.entry_id)
-    hass = SimpleNamespace(data={DOMAIN: {entry.entry_id: runtime}})
+    entry = FakeEntry(runtime.entry.entry_id, runtime)
+    hass = SimpleNamespace()
     add_calls: list[list[str | None]] = []
 
     def async_add_entities(entities) -> None:

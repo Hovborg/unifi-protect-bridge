@@ -8,6 +8,7 @@ from typing import Any
 from aiohttp.web import Request, Response, json_response
 
 from .const import CONF_WEBHOOK_ID, DOMAIN, EVENT_DETECTION, EVENT_WEBHOOK
+from .entry_runtime import iter_entry_runtimes
 from .normalize import normalize_webhook_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ async def _read_payload(request: Request) -> dict[str, Any]:
 
 
 def _runtime_for_webhook(hass: Any, webhook_id: str) -> Any | None:
-    for runtime in hass.data.get(DOMAIN, {}).values():
+    for runtime in iter_entry_runtimes(hass):
         if runtime.entry.data.get(CONF_WEBHOOK_ID) == webhook_id:
             return runtime
     return None

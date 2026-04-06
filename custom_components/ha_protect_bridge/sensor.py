@@ -7,12 +7,14 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity import EntityCategory
 
 from .catalog import humanize_source
-from .const import DOMAIN, STATUS_SENSOR_NAME
+from .const import STATUS_SENSOR_NAME
+from .entry_runtime import get_entry_runtime
 from .runtime import BridgeSensorSpec, HaProtectBridgeRuntime
 
 
 async def async_setup_entry(hass: Any, entry: Any, async_add_entities: Any) -> None:
-    runtime: HaProtectBridgeRuntime = hass.data[DOMAIN][entry.entry_id]
+    del hass
+    runtime: HaProtectBridgeRuntime = get_entry_runtime(entry)
     known_sensor_keys: set[str] = set()
     entities = [HaProtectBridgeStatusSensor(runtime)]
     entities.extend(_build_new_timestamp_entities(runtime, known_sensor_keys))
