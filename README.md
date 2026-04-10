@@ -261,6 +261,45 @@ Then restart Home Assistant and add the integration from **Settings -> Devices &
 >
 > That private API is what makes zero-manual setup possible, but it also means future Protect updates may require compatibility fixes in this integration.
 
+## Optional CLI
+
+The CLI is a developer and support tool for local checks, diagnostics, and dry
+runs. HACS users do not need it to run the Home Assistant integration.
+
+From a repository checkout:
+
+```bash
+source .venv/bin/activate
+unifi-protect-bridge doctor
+unifi-protect-bridge repo check
+unifi-protect-bridge integration check
+unifi-protect-bridge integration manifest
+unifi-protect-bridge bridge sources
+```
+
+For offline Protect webhook and automation checks, save JSON first and pass it to
+the CLI:
+
+```bash
+unifi-protect-bridge protect cameras --bootstrap protect-bootstrap.json
+unifi-protect-bridge protect automations --file protect-automations.json
+unifi-protect-bridge webhook normalize --file protect-webhook.json --query "source=person"
+unifi-protect-bridge automation inspect --file protect-automations.json
+unifi-protect-bridge automation render person --device "84:78:48:28:72:5C" --webhook-url "https://ha.example/api/webhook/redacted"
+unifi-protect-bridge bridge plan --bootstrap protect-bootstrap.json --webhook-url "https://ha.example/api/webhook/redacted"
+unifi-protect-bridge bridge plan person --device "84:78:48:28:72:5C" --webhook-url "https://ha.example/api/webhook/redacted"
+```
+
+The CLI does not change Protect automations by default. Setup-changing commands
+must be added as explicit apply commands with confirmation and dry-run output
+first.
+
+For a live Home Assistant reachability check, set `HA_BASE_URL` and `HA_TOKEN`, then run:
+
+```bash
+unifi-protect-bridge ha ping
+```
+
 ## Development
 
 ```bash
