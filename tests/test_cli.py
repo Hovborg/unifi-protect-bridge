@@ -23,7 +23,7 @@ def test_help() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "UniFi Protect Bridge 0.2.12" in result.stdout
+    assert "UniFi Protect Bridge 0.2.13" in result.stdout
 
 
 def test_doctor() -> None:
@@ -46,7 +46,7 @@ def test_integration_manifest_json() -> None:
     assert result.exit_code == 0
     manifest = json.loads(result.stdout)
     assert manifest["domain"] == "unifi_protect_bridge"
-    assert manifest["version"] == "0.2.12"
+    assert manifest["version"] == "0.2.13"
 
 
 def test_webhook_normalize_redacts_device_ids_by_default(tmp_path) -> None:
@@ -172,6 +172,42 @@ def test_protect_cameras_from_bootstrap(tmp_path) -> None:
     assert "ring" in result.stdout
 
 
+def test_protect_cameras_requires_source() -> None:
+    result = runner.invoke(app, ["protect", "cameras"])
+
+    assert result.exit_code == 1
+    assert "Pass --bootstrap" in result.stderr
+
+
+def test_protect_login_check_requires_connect() -> None:
+    result = runner.invoke(app, ["protect", "login-check"])
+
+    assert result.exit_code == 1
+    assert "Pass --connect" in result.stderr
+
+
+def test_live_protect_timeout_must_be_positive() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "protect",
+            "login-check",
+            "--connect",
+            "--protect-url",
+            "https://protect.example",
+            "--username",
+            "user",
+            "--password",
+            "secret",
+            "--timeout",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Timeout must be greater than 0." in result.stderr
+
+
 def test_bridge_sources() -> None:
     result = runner.invoke(app, ["bridge", "sources"])
     assert result.exit_code == 0
@@ -228,6 +264,122 @@ def test_bridge_plan_requires_device() -> None:
     )
     assert result.exit_code == 1
     assert "At least one --device value is required." in result.stderr
+
+
+def test_bridge_diff_from_files_redacts_payload_ids_and_url(tmp_path) -> None:
+    bootstrap_file = tmp_path / "bootstrap.json"
+    automations_file = tmp_path / "automations.json"
+    bootstrap_file.write_text(json.dumps(_bootstrap()), encoding="utf-8")
+    automations_file.write_text(
+        json.dumps([{"id": "user", "name": "User managed person webhook"}]),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "bridge",
+            "diff",
+            "--bootstrap",
+            str(bootstrap_file),
+            "--automations",
+            str(automations_file),
+            "--webhook-url",
+            "https://ha.example/api/webhook/secret",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    plan = json.loads(result.stdout)
+    assert plan["summary"]["create"] > 0
+    assert plan["summary"]["ignored_user_owned"] == 1
+    assert "84784828725C" not in result.stdout
+    assert "secret" not in result.stdout
+
+
+def test_bridge_apply_requires_connect_and_yes() -> None:
+    result = runner.invoke(
+        app,
+        ["bridge", "apply", "--webhook-url", "https://ha.example/api/webhook/secret"],
+    )
+
+    assert result.exit_code == 1
+    assert "Pass --connect" in result.stderr
+
+    result = runner.invoke(
+        app,
+        [
+            "bridge",
+            "apply",
+            "--connect",
+            "--webhook-url",
+            "https://ha.example/api/webhook/secret",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Pass --yes" in result.stderr
+
+
+def test_bridge_apply_uses_plan_before_apply(monkeypatch) -> None:
+    calls = []
+    plan = {
+        "dry_run": True,
+        "actions": [{"action": "create", "source": "person", "payload": {"name": "x"}}],
+        "summary": {
+            "create": 1,
+            "keep": 0,
+            "replace": 0,
+            "delete_duplicate": 0,
+            "delete_stale": 0,
+            "ignored_user_owned": 0,
+        },
+    }
+
+    def fake_plan(**kwargs):
+        calls.append(("plan", kwargs))
+        return plan
+
+    def fake_apply(**kwargs):
+        calls.append(("apply", kwargs))
+        return {
+            "ok": True,
+            "summary": {
+                "create": 1,
+                "replace": 0,
+                "delete_duplicate": 0,
+                "delete_stale": 0,
+                "keep": 0,
+            },
+        }
+
+    monkeypatch.setattr("unifi_protect_bridge.cli._build_bridge_diff_plan", fake_plan)
+    monkeypatch.setattr("unifi_protect_bridge.cli._apply_live_bridge_plan", fake_apply)
+
+    result = runner.invoke(
+        app,
+        [
+            "bridge",
+            "apply",
+            "--connect",
+            "--yes",
+            "--webhook-url",
+            "https://ha.example/api/webhook/secret",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert [call[0] for call in calls] == ["plan", "apply"]
+    assert "Applied bridge-owned Protect automation changes." in result.stdout
+
+
+def test_ha_setup_url() -> None:
+    result = runner.invoke(app, ["ha", "setup-url"])
+
+    assert result.exit_code == 0
+    assert "config_flow_start" in result.stdout
+    assert "unifi_protect_bridge" in result.stdout
 
 
 def test_ha_resync_requires_yes() -> None:

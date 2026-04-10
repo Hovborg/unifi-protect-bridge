@@ -25,11 +25,13 @@ class ProtectApiClient:
         username: str,
         password: str,
         verify_ssl: bool,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self._base_url = _normalize_base_url(host)
         self._username = username
         self._password = password
         self._verify_ssl = verify_ssl
+        self._timeout_seconds = timeout_seconds
         self._session: aiohttp.ClientSession | None = None
         self._csrf_token: str | None = None
 
@@ -174,7 +176,7 @@ class ProtectApiClient:
         self._session = aiohttp.ClientSession(
             connector=connector,
             cookie_jar=aiohttp.CookieJar(unsafe=True),
-            timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT_SECONDS),
+            timeout=aiohttp.ClientTimeout(total=self._timeout_seconds),
         )
 
 

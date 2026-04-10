@@ -228,21 +228,38 @@ def parse_query_string(query: str | None) -> dict[str, str]:
 def component_module(repo: Path, module_name: str) -> Any:
     repo = repo.expanduser().resolve()
     component = repo / "custom_components" / DOMAIN
+    package_name = f"custom_components.{DOMAIN}"
+
     if not component.is_dir():
-        raise CliConfigError(f"Could not find {component}")
+        try:
+            return importlib.import_module(f"{package_name}.{module_name}")
+        except ModuleNotFoundError as err:
+            expected_names = {
+                "custom_components",
+                package_name,
+                f"{package_name}.{module_name}",
+            }
+            if err.name in expected_names:
+                raise CliConfigError(
+                    f"Could not find {component}; pass --repo or install the CLI package."
+                ) from err
+            raise
 
     custom_components = sys.modules.get("custom_components")
     if custom_components is None:
         custom_components = types.ModuleType("custom_components")
         custom_components.__path__ = [str(repo / "custom_components")]
         sys.modules["custom_components"] = custom_components
+    else:
+        _prepend_module_path(custom_components, repo / "custom_components")
 
-    package_name = f"custom_components.{DOMAIN}"
     package = sys.modules.get(package_name)
     if package is None:
         package = types.ModuleType(package_name)
         package.__path__ = [str(component)]
         sys.modules[package_name] = package
+    else:
+        _prepend_module_path(package, component)
 
     return importlib.import_module(f"{package_name}.{module_name}")
 
@@ -305,6 +322,18 @@ def automation_prefix_kind(name: str | None) -> str:
     if name and name.startswith("HA Protect Bridge: "):
         return "legacy"
     return "unmanaged"
+
+
+def _prepend_module_path(module: Any, path: Path) -> None:
+    module_path = getattr(module, "__path__", None)
+    if module_path is None:
+        return
+    text = str(path)
+    paths = list(module_path)
+    if text in paths:
+        paths.remove(text)
+    paths.insert(0, text)
+    module.__path__ = paths
 
 
 def _flag(value: str | None) -> str:

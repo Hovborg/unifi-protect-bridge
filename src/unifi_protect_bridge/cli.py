@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import webbrowser
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
+import aiohttp
 import httpx
 import typer
 
@@ -33,6 +36,11 @@ from unifi_protect_bridge.detections import (
 )
 from unifi_protect_bridge.detections import (
     build_bridge_plan as build_detection_plan,
+)
+
+HA_CONFIG_FLOW_URL = (
+    "https://my.home-assistant.io/redirect/config_flow_start/?"
+    + urlencode({"domain": "unifi_protect_bridge"})
 )
 
 app = typer.Typer(
@@ -77,6 +85,26 @@ JsonOption = Annotated[bool, typer.Option("--json", help="Print machine-readable
 RepoOption = Annotated[
     Path | None,
     typer.Option("--repo", help="Repository path containing custom_components."),
+]
+ProtectUrlOption = Annotated[
+    str | None,
+    typer.Option("--protect-url", help="Override UNIFI_PROTECT_BASE_URL."),
+]
+ProtectUsernameOption = Annotated[
+    str | None,
+    typer.Option("--username", help="Override UNIFI_PROTECT_USERNAME."),
+]
+ProtectPasswordOption = Annotated[
+    str | None,
+    typer.Option("--password", help="Override UNIFI_PROTECT_PASSWORD. Prefer env."),
+]
+TimeoutOption = Annotated[
+    float | None,
+    typer.Option("--timeout", help="HTTP timeout in seconds."),
+]
+VerifySslOption = Annotated[
+    bool | None,
+    typer.Option("--verify-ssl/--no-verify-ssl", help="Override VERIFY_SSL."),
 ]
 
 
@@ -199,13 +227,23 @@ def bridge_sources(
 @protect_app.command("cameras")
 def protect_cameras(
     bootstrap: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--bootstrap",
             "--bootstrap-json",
             help="UniFi Protect bootstrap JSON file. No live Protect login is performed.",
         ),
-    ],
+    ] = None,
+    connect: Annotated[
+        bool,
+        typer.Option("--connect", help="Connect to UniFi Protect using env/options."),
+    ] = False,
+    protect_url: ProtectUrlOption = None,
+    username: ProtectUsernameOption = None,
+    password: ProtectPasswordOption = None,
+    timeout: TimeoutOption = None,
+    verify_ssl: VerifySslOption = None,
+    repo: RepoOption = None,
     json_output: JsonOption = False,
     show_ids: Annotated[
         bool,
@@ -214,7 +252,20 @@ def protect_cameras(
 ) -> None:
     """Summarize cameras and supported detections from exported bootstrap JSON."""
     try:
-        catalog = build_camera_catalog(load_json_file(bootstrap))
+        if connect:
+            catalog, _automations = _load_live_protect_snapshot(
+                repo=repo,
+                protect_url=protect_url,
+                username=username,
+                password=password,
+                timeout=timeout,
+                verify_ssl=verify_ssl,
+                include_automations=False,
+            )
+        elif bootstrap:
+            catalog = build_camera_catalog(load_json_file(bootstrap))
+        else:
+            _fail("Pass --bootstrap for offline mode, or --connect for live Protect.")
     except CliConfigError as err:
         _fail(str(err))
 
@@ -233,22 +284,91 @@ def protect_cameras(
         )
 
 
+@protect_app.command("login-check")
+def protect_login_check(
+    connect: Annotated[
+        bool,
+        typer.Option("--connect", help="Connect to UniFi Protect using env/options."),
+    ] = False,
+    protect_url: ProtectUrlOption = None,
+    username: ProtectUsernameOption = None,
+    password: ProtectPasswordOption = None,
+    timeout: TimeoutOption = None,
+    verify_ssl: VerifySslOption = None,
+    repo: RepoOption = None,
+    json_output: JsonOption = False,
+) -> None:
+    """Verify Protect credentials by logging in and reading bootstrap."""
+    if not connect:
+        _fail("Pass --connect to perform a live Protect login check.")
+
+    try:
+        catalog, _automations = _load_live_protect_snapshot(
+            repo=repo,
+            protect_url=protect_url,
+            username=username,
+            password=password,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+            include_automations=False,
+        )
+    except CliConfigError as err:
+        _fail(str(err))
+
+    result = {
+        "ok": True,
+        "nvr_name": catalog.get("nvr_name"),
+        "camera_count": len(catalog.get("cameras") or []),
+    }
+    if json_output:
+        _echo_json(result)
+        return
+
+    typer.echo("Protect login: ok")
+    typer.echo(f"NVR: {result['nvr_name'] or 'unknown'}")
+    typer.echo(f"Cameras: {result['camera_count']}")
+
+
 @protect_app.command("automations")
 def protect_automations(
     automations_file: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--file",
             "--automations-json",
             "-f",
             help="Protect automations JSON list or object with an automations list.",
         ),
-    ],
+    ] = None,
+    connect: Annotated[
+        bool,
+        typer.Option("--connect", help="Connect to UniFi Protect using env/options."),
+    ] = False,
+    protect_url: ProtectUrlOption = None,
+    username: ProtectUsernameOption = None,
+    password: ProtectPasswordOption = None,
+    timeout: TimeoutOption = None,
+    verify_ssl: VerifySslOption = None,
+    repo: RepoOption = None,
     json_output: JsonOption = False,
 ) -> None:
     """Inspect exported Protect automations for bridge ownership and duplicates."""
     try:
-        report = inspect_automations(automation_items(load_json_file(automations_file)))
+        if connect:
+            _catalog, automations = _load_live_protect_snapshot(
+                repo=repo,
+                protect_url=protect_url,
+                username=username,
+                password=password,
+                timeout=timeout,
+                verify_ssl=verify_ssl,
+                include_automations=True,
+            )
+        elif automations_file:
+            automations = automation_items(load_json_file(automations_file))
+        else:
+            _fail("Pass --file for offline mode, or --connect for live Protect.")
+        report = inspect_automations(automations)
     except CliConfigError as err:
         _fail(str(err))
 
@@ -471,6 +591,146 @@ def bridge_plan(
     typer.echo(f"name: {plan['automation']['name']}")
 
 
+@bridge_app.command("diff")
+def bridge_diff(
+    webhook_url: Annotated[
+        str,
+        typer.Option("--webhook-url", help="Home Assistant webhook URL."),
+    ],
+    bootstrap_file: Annotated[
+        Path | None,
+        typer.Option("--bootstrap", "--bootstrap-json", "-b", help="Protect bootstrap JSON file."),
+    ] = None,
+    automations_file: Annotated[
+        Path | None,
+        typer.Option("--automations", "--automations-json", help="Protect automations JSON file."),
+    ] = None,
+    connect: Annotated[
+        bool,
+        typer.Option("--connect", help="Connect to UniFi Protect using env/options."),
+    ] = False,
+    protect_url: ProtectUrlOption = None,
+    username: ProtectUsernameOption = None,
+    password: ProtectPasswordOption = None,
+    timeout: TimeoutOption = None,
+    verify_ssl: VerifySslOption = None,
+    repo: RepoOption = None,
+    json_output: JsonOption = False,
+    show_ids: Annotated[
+        bool,
+        typer.Option("--show-ids", help="Show camera IDs/MACs in JSON payloads."),
+    ] = False,
+    show_urls: Annotated[
+        bool,
+        typer.Option("--show-urls", help="Show full webhook URLs in JSON payloads."),
+    ] = False,
+) -> None:
+    """Diff desired bridge-owned automations against Protect state."""
+    try:
+        plan = _build_bridge_diff_plan(
+            repo=repo,
+            webhook_url=webhook_url,
+            bootstrap_file=bootstrap_file,
+            automations_file=automations_file,
+            connect=connect,
+            protect_url=protect_url,
+            username=username,
+            password=password,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+        )
+    except CliConfigError as err:
+        _fail(str(err))
+
+    public_plan = _public_bridge_plan(plan, show_ids=show_ids, show_urls=show_urls)
+    if json_output:
+        _echo_json(public_plan)
+        return
+
+    _echo_plan_summary(public_plan)
+
+
+@bridge_app.command("apply")
+def bridge_apply(
+    webhook_url: Annotated[
+        str,
+        typer.Option("--webhook-url", help="Home Assistant webhook URL."),
+    ],
+    connect: Annotated[
+        bool,
+        typer.Option("--connect", help="Connect to UniFi Protect using env/options."),
+    ] = False,
+    protect_url: ProtectUrlOption = None,
+    username: ProtectUsernameOption = None,
+    password: ProtectPasswordOption = None,
+    timeout: TimeoutOption = None,
+    verify_ssl: VerifySslOption = None,
+    repo: RepoOption = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Apply bridge-owned automation changes."),
+    ] = False,
+    max_deletes: Annotated[
+        int,
+        typer.Option("--max-deletes", help="Maximum Protect automations to delete."),
+    ] = 5,
+    allow_custom_webhook_url: Annotated[
+        bool,
+        typer.Option(
+            "--allow-custom-webhook-url",
+            help="Allow webhook URLs outside /api/webhook/.",
+        ),
+    ] = False,
+    json_output: JsonOption = False,
+) -> None:
+    """Create/update/delete bridge-owned Protect webhook automations."""
+    if not connect:
+        _fail("Pass --connect to apply directly to UniFi Protect.")
+    if not yes:
+        _fail("Pass --yes to apply bridge-owned Protect automation changes.")
+    if not allow_custom_webhook_url and "/api/webhook/" not in urlsplit(webhook_url).path:
+        _fail("Webhook URL must contain /api/webhook/, or pass --allow-custom-webhook-url.")
+
+    try:
+        plan = _build_bridge_diff_plan(
+            repo=repo,
+            webhook_url=webhook_url,
+            bootstrap_file=None,
+            automations_file=None,
+            connect=True,
+            protect_url=protect_url,
+            username=username,
+            password=password,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+        )
+        plan_mod = component_module(repo or default_repo_path(), "automation_plan")
+        delete_count = plan_mod.plan_delete_count(plan)
+        if plan_mod.plan_has_missing_delete_ids(plan):
+            _fail("Plan contains bridge-owned deletes without automation ids.")
+        if delete_count > max_deletes:
+            _fail(f"Plan would delete {delete_count} automations; increase --max-deletes to allow.")
+        result = _apply_live_bridge_plan(
+            repo=repo,
+            plan=plan,
+            protect_url=protect_url,
+            username=username,
+            password=password,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+        )
+    except CliConfigError as err:
+        _fail(str(err))
+
+    if json_output:
+        _echo_json(result)
+        return
+
+    typer.echo("Applied bridge-owned Protect automation changes.")
+    for key, value in result["summary"].items():
+        typer.echo(f"{key}: {value}")
+
+
 @ha_app.command("ping")
 def ha_ping(
     base_url: Annotated[
@@ -540,6 +800,35 @@ def ha_ping(
 
     if not response.is_success:
         raise typer.Exit(1)
+
+
+@ha_app.command("setup-url")
+def ha_setup_url(
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open", help="Open the setup URL in the default browser."),
+    ] = False,
+    json_output: JsonOption = False,
+) -> None:
+    """Print the Home Assistant config-flow URL for first setup."""
+    result = {
+        "url": HA_CONFIG_FLOW_URL,
+        "domain": "unifi_protect_bridge",
+        "note": "Use Home Assistant's config flow for first setup, then run ha resync --yes.",
+    }
+    if open_browser:
+        webbrowser.open(HA_CONFIG_FLOW_URL)
+        result["opened"] = True
+    else:
+        result["opened"] = False
+
+    if json_output:
+        _echo_json(result)
+        return
+
+    typer.echo("Open this Home Assistant setup URL:")
+    typer.echo(HA_CONFIG_FLOW_URL)
+    typer.echo("After the entry exists, run: unifi-protect-bridge ha resync --yes")
 
 
 @ha_app.command("resync")
@@ -630,6 +919,211 @@ def ha_resync(
         raise typer.Exit(1)
 
 
+def _build_bridge_diff_plan(
+    *,
+    repo: Path | None,
+    webhook_url: str,
+    bootstrap_file: Path | None,
+    automations_file: Path | None,
+    connect: bool,
+    protect_url: str | None,
+    username: str | None,
+    password: str | None,
+    timeout: float | None,
+    verify_ssl: bool | None,
+) -> dict[str, Any]:
+    repo_path = repo or default_repo_path()
+    if connect:
+        catalog, automations = _load_live_protect_snapshot(
+            repo=repo_path,
+            protect_url=protect_url,
+            username=username,
+            password=password,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+            include_automations=True,
+        )
+    else:
+        if not bootstrap_file or not automations_file:
+            raise CliConfigError(
+                "Pass --bootstrap and --automations for offline mode, or --connect."
+            )
+        catalog_builder = component_module(repo_path, "catalog").build_camera_catalog
+        catalog = catalog_builder(load_json_file(bootstrap_file))
+        automations = automation_items(load_json_file(automations_file))
+
+    plan_builder = component_module(repo_path, "automation_plan").build_managed_automation_plan
+    return plan_builder(catalog, automations, webhook_url)
+
+
+def _load_live_protect_snapshot(
+    *,
+    repo: Path | None,
+    protect_url: str | None,
+    username: str | None,
+    password: str | None,
+    timeout: float | None,
+    verify_ssl: bool | None,
+    include_automations: bool,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    settings = Settings.load()
+    resolved_url = protect_url or settings.unifi_protect_base_url
+    resolved_username = username or settings.unifi_protect_username
+    resolved_password = password or settings.unifi_protect_password
+    resolved_verify_ssl = settings.verify_ssl if verify_ssl is None else verify_ssl
+    resolved_timeout = _resolve_timeout(timeout, settings.request_timeout_seconds)
+
+    if not resolved_url or not resolved_username or not resolved_password:
+        raise CliConfigError(
+            "Set UNIFI_PROTECT_BASE_URL, UNIFI_PROTECT_USERNAME, and "
+            "UNIFI_PROTECT_PASSWORD, or pass --protect-url, --username, and --password."
+        )
+
+    return asyncio.run(
+        _async_load_live_protect_snapshot(
+            repo=repo or default_repo_path(),
+            protect_url=resolved_url,
+            username=resolved_username,
+            password=resolved_password,
+            timeout=resolved_timeout,
+            verify_ssl=resolved_verify_ssl,
+            include_automations=include_automations,
+        )
+    )
+
+
+async def _async_load_live_protect_snapshot(
+    *,
+    repo: Path,
+    protect_url: str,
+    username: str,
+    password: str,
+    timeout: float,
+    verify_ssl: bool,
+    include_automations: bool,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    protect_api = component_module(repo, "protect_api")
+    catalog_builder = component_module(repo, "catalog").build_camera_catalog
+    try:
+        client = protect_api.ProtectApiClient(
+            protect_url,
+            username,
+            password,
+            verify_ssl,
+            timeout,
+        )
+    except protect_api.ProtectApiError as err:
+        raise CliConfigError(str(err)) from err
+    try:
+        await client.async_setup()
+        bootstrap = await client.async_get_bootstrap()
+        automations = await client.async_get_automations() if include_automations else []
+    except (protect_api.ProtectApiError, aiohttp.ClientError, TimeoutError, OSError) as err:
+        raise CliConfigError(f"Protect request failed: {err}") from err
+    finally:
+        await client.async_close()
+    return catalog_builder(bootstrap), automations
+
+
+def _apply_live_bridge_plan(
+    *,
+    repo: Path | None,
+    plan: Mapping[str, Any],
+    protect_url: str | None,
+    username: str | None,
+    password: str | None,
+    timeout: float | None,
+    verify_ssl: bool | None,
+) -> dict[str, Any]:
+    settings = Settings.load()
+    resolved_url = protect_url or settings.unifi_protect_base_url
+    resolved_username = username or settings.unifi_protect_username
+    resolved_password = password or settings.unifi_protect_password
+    resolved_verify_ssl = settings.verify_ssl if verify_ssl is None else verify_ssl
+    resolved_timeout = _resolve_timeout(timeout, settings.request_timeout_seconds)
+
+    if not resolved_url or not resolved_username or not resolved_password:
+        raise CliConfigError(
+            "Set UNIFI_PROTECT_BASE_URL, UNIFI_PROTECT_USERNAME, and "
+            "UNIFI_PROTECT_PASSWORD, or pass --protect-url, --username, and --password."
+        )
+
+    return asyncio.run(
+        _async_apply_live_bridge_plan(
+            repo=repo or default_repo_path(),
+            plan=plan,
+            protect_url=resolved_url,
+            username=resolved_username,
+            password=resolved_password,
+            timeout=resolved_timeout,
+            verify_ssl=resolved_verify_ssl,
+        )
+    )
+
+
+async def _async_apply_live_bridge_plan(
+    *,
+    repo: Path,
+    plan: Mapping[str, Any],
+    protect_url: str,
+    username: str,
+    password: str,
+    timeout: float,
+    verify_ssl: bool,
+) -> dict[str, Any]:
+    protect_api = component_module(repo, "protect_api")
+    try:
+        client = protect_api.ProtectApiClient(
+            protect_url,
+            username,
+            password,
+            verify_ssl,
+            timeout,
+        )
+    except protect_api.ProtectApiError as err:
+        raise CliConfigError(str(err)) from err
+    applied = {
+        "create": 0,
+        "replace": 0,
+        "delete_duplicate": 0,
+        "delete_stale": 0,
+        "keep": 0,
+    }
+    try:
+        await client.async_setup()
+        for action in plan.get("actions") or []:
+            action_type = action.get("action")
+            if action_type == "keep":
+                applied["keep"] += 1
+            elif action_type == "create":
+                await client.async_create_automation(action["payload"])
+                applied["create"] += 1
+            elif action_type == "replace":
+                for automation_id in action.get("delete_ids") or []:
+                    await client.async_delete_automation(automation_id)
+                await client.async_create_automation(action["payload"])
+                applied["replace"] += 1
+            elif action_type in {"delete_duplicate", "delete_stale"}:
+                await client.async_delete_automation(action["id"])
+                applied[action_type] += 1
+    except (protect_api.ProtectApiError, aiohttp.ClientError, TimeoutError, OSError) as err:
+        raise CliConfigError(f"Protect request failed: {err}") from err
+    finally:
+        await client.async_close()
+
+    return {
+        "ok": True,
+        "summary": applied,
+    }
+
+
+def _resolve_timeout(timeout: float | None, default_timeout: int) -> float:
+    resolved_timeout = float(default_timeout if timeout is None else timeout)
+    if resolved_timeout <= 0:
+        raise CliConfigError("Timeout must be greater than 0.")
+    return resolved_timeout
+
+
 def _render_payload(
     repo: Path,
     source: str,
@@ -694,6 +1188,71 @@ def _automation_ref(
         "enabled": bool(redacted.get("enable", True)),
         "actions": redacted.get("actions") or [],
     }
+
+
+def _public_bridge_plan(
+    plan: Mapping[str, Any],
+    *,
+    show_ids: bool,
+    show_urls: bool,
+) -> dict[str, Any]:
+    public_actions = []
+    for action in plan.get("actions") or []:
+        public_action = dict(action)
+        if "payload" in public_action and isinstance(public_action["payload"], Mapping):
+            public_action["payload"] = _redact_plan_payload(
+                public_action["payload"],
+                show_ids=show_ids,
+                show_urls=show_urls,
+            )
+        public_actions.append(public_action)
+
+    return {
+        "dry_run": bool(plan.get("dry_run", True)),
+        "nvr_name": plan.get("nvr_name"),
+        "camera_count": plan.get("camera_count"),
+        "managed_source_count": plan.get("managed_source_count"),
+        "ignored_user_owned": plan.get("ignored_user_owned"),
+        "summary": dict(plan.get("summary") or {}),
+        "actions": public_actions,
+    }
+
+
+def _redact_plan_payload(
+    payload: Mapping[str, Any],
+    *,
+    show_ids: bool,
+    show_urls: bool,
+) -> dict[str, Any]:
+    redacted = redact_automation(payload, show_urls=show_urls)
+    if not show_ids:
+        for source in redacted.get("sources") or []:
+            if isinstance(source, dict) and "device" in source:
+                source["device"] = "<device_id>"
+    return redacted
+
+
+def _echo_plan_summary(plan: Mapping[str, Any]) -> None:
+    typer.echo("No Protect changes were made.")
+    typer.echo(f"NVR: {plan.get('nvr_name') or 'unknown'}")
+    typer.echo(f"Cameras: {plan.get('camera_count')}")
+    summary = plan.get("summary") or {}
+    for action in (
+        "keep",
+        "create",
+        "replace",
+        "delete_duplicate",
+        "delete_stale",
+        "ignored_user_owned",
+    ):
+        typer.echo(f"{action}: {summary.get(action, 0)}")
+    for action in plan.get("actions") or []:
+        action_type = action.get("action")
+        source = action.get("source")
+        if action_type == "keep":
+            typer.echo(f"keep: {source}")
+        elif action_type in {"create", "replace", "delete_duplicate", "delete_stale"}:
+            typer.echo(f"{action_type}: {source}")
 
 
 def _public_camera_catalog(catalog: Mapping[str, Any], *, show_ids: bool) -> dict[str, Any]:

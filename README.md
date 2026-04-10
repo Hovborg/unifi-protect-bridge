@@ -266,6 +266,12 @@ Then restart Home Assistant and add the integration from **Settings -> Devices &
 The CLI is a developer and support tool for local checks, diagnostics, and dry
 runs. HACS users do not need it to run the Home Assistant integration.
 
+This repository intentionally ships both the HACS integration and the CLI for
+now. The CLI reuses the same Protect payload builders, ownership rules, and
+Home Assistant service names as the integration, so one release keeps both
+parts aligned. If the CLI becomes a standalone product with its own lifecycle,
+it can be split into a separate repo later.
+
 From a repository checkout:
 
 ```bash
@@ -288,13 +294,37 @@ unifi-protect-bridge automation inspect --file protect-automations.json
 unifi-protect-bridge automation render person --device "84:78:48:28:72:5C" --webhook-url "https://ha.example/api/webhook/redacted"
 unifi-protect-bridge bridge plan --bootstrap protect-bootstrap.json --webhook-url "https://ha.example/api/webhook/redacted"
 unifi-protect-bridge bridge plan person --device "84:78:48:28:72:5C" --webhook-url "https://ha.example/api/webhook/redacted"
+unifi-protect-bridge bridge diff --bootstrap protect-bootstrap.json --automations protect-automations.json --webhook-url "https://ha.example/api/webhook/redacted"
 ```
 
-The CLI does not change Protect automations by default.
+For live Protect read-only checks, set `UNIFI_PROTECT_BASE_URL`,
+`UNIFI_PROTECT_USERNAME`, and `UNIFI_PROTECT_PASSWORD`, then run:
+
+```bash
+unifi-protect-bridge protect login-check --connect
+unifi-protect-bridge protect cameras --connect
+unifi-protect-bridge protect automations --connect
+unifi-protect-bridge bridge diff --connect --webhook-url "https://ha.example/api/webhook/redacted"
+```
+
+The read-only CLI commands do not change Protect automations. To make Home
+Assistant sensors and alarms receive live Protect events, the bridge needs
+bridge-owned Protect webhook automations. Direct Protect apply creates,
+replaces, or deletes only those managed automations, and is available only as an
+explicit private-API operation:
+
+```bash
+unifi-protect-bridge bridge apply --connect --webhook-url "https://ha.example/api/webhook/redacted" --yes
+```
+
+That command always builds a diff first, requires `--yes`, refuses non-webhook
+URLs unless explicitly allowed, and only touches bridge-owned automations named
+with `UniFi Protect Bridge:` or the legacy `HA Protect Bridge:` prefix.
 
 For live Home Assistant checks, set `HA_BASE_URL` and `HA_TOKEN`, then run:
 
 ```bash
+unifi-protect-bridge ha setup-url
 unifi-protect-bridge ha ping
 unifi-protect-bridge ha resync --yes
 ```
