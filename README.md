@@ -1,6 +1,14 @@
 # UniFi Protect Bridge for Home Assistant
 
 <p align="center">
+  <img src="custom_components/unifi_protect_bridge/brand/logo.png" alt="UniFi Protect Bridge" width="460">
+</p>
+
+<p align="center">
+  <strong>Managed UniFi Protect webhooks, timestamp sensors, typed events, and recognized-face tracking for Home Assistant.</strong>
+</p>
+
+<p align="center">
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=Hovborg&repository=unifi-protect-bridge&category=integration">
     <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open in HACS">
   </a>
@@ -8,7 +16,7 @@
 
 <p align="center">
   <a href="https://github.com/Hovborg/unifi-protect-bridge/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Hovborg/unifi-protect-bridge?display_name=tag&style=for-the-badge" alt="Latest Release">
+    <img src="https://img.shields.io/github/v/release/Hovborg/unifi-protect-bridge?display_name=tag&style=for-the-badge" alt="Latest release">
   </a>
   <a href="https://github.com/Hovborg/unifi-protect-bridge/actions/workflows/ci.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/unifi-protect-bridge/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI">
@@ -17,224 +25,221 @@
     <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/unifi-protect-bridge/hassfest.yml?branch=main&label=Hassfest&style=for-the-badge" alt="Hassfest">
   </a>
   <a href="https://github.com/Hovborg/unifi-protect-bridge/actions/workflows/hacs.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/unifi-protect-bridge/hacs.yml?branch=main&label=HACS%20Validation&style=for-the-badge" alt="HACS Validation">
+    <img src="https://img.shields.io/github/actions/workflow/status/Hovborg/unifi-protect-bridge/hacs.yml?branch=main&label=HACS%20Validation&style=for-the-badge" alt="HACS validation">
   </a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/HACS-Integration-41BDF5?style=for-the-badge" alt="HACS Integration">
+  <img src="https://img.shields.io/badge/HACS-Custom%20Integration-41BDF5?style=for-the-badge" alt="HACS custom integration">
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.3%2B-18BCF2?style=for-the-badge" alt="Home Assistant 2026.3+">
-  <img src="https://img.shields.io/badge/UniFi%20Protect-Local%20Push-2EBD59?style=for-the-badge" alt="UniFi Protect Local Push">
-  <img src="https://img.shields.io/badge/Setup-Config%20Flow-1F6FEB?style=for-the-badge" alt="Config Flow">
+  <img src="https://img.shields.io/badge/UniFi%20Protect-Local%20Push-2EBD59?style=for-the-badge" alt="UniFi Protect local push">
 </p>
 
 <p align="center">
-  <strong>UniFi Protect to Home Assistant, without manual Alarm Manager rule sprawl.</strong>
+  <a href="#quick-install">Quick Install</a> |
+  <a href="#what-it-does">What It Does</a> |
+  <a href="#recognized-faces">Recognized Faces</a> |
+  <a href="#supported-detections">Detections</a> |
+  <a href="#troubleshooting">Troubleshooting</a> |
+  <a href="#optional-cli">Optional CLI</a>
 </p>
 
-<p align="center">
-  UniFi Protect Bridge discovers your cameras, provisions the Protect webhook automations for you,
-  and exposes clean detection sensors and typed events inside Home Assistant.
-</p>
+UniFi Protect already has Alarm Manager and webhook actions, but maintaining a
+separate webhook rule for every detection source gets messy quickly. UniFi
+Protect Bridge turns that setup into a normal Home Assistant integration. It
+discovers camera capabilities, creates bridge-owned Protect webhook automations,
+receives local push events, and exposes the results as clean Home Assistant
+entities and events.
 
-<p align="center">
-  <a href="#why-this-project">Why</a> •
-  <a href="#how-it-works">How It Works</a> •
-  <a href="#project-split">Project Split</a> •
-  <a href="#install-with-hacs">Install</a> •
-  <a href="#configure-it">Configure</a> •
-  <a href="#supported-detections">Detections</a> •
-  <a href="#troubleshooting">Troubleshooting</a> •
-  <a href="#development">Development</a>
-</p>
+> [!IMPORTANT]
+> This repository is the Home Assistant custom integration. The CLI is optional,
+> lives in a separate repository, and is not required for HACS installs.
 
-> [!TIP]
-> If you want the shortest path, click **Open in HACS**, install the integration, restart Home Assistant, and add **UniFi Protect Bridge** from **Settings -> Devices & services**.
-> No CLI install is required for HACS.
+## Highlights
 
-## At A Glance
-
-| Item | Value |
+| Area | What you get |
 | --- | --- |
-| Home Assistant domain | `unifi_protect_bridge` |
-| HACS repository | `https://github.com/Hovborg/unifi-protect-bridge` |
-| Manual install path | `config/custom_components/unifi_protect_bridge/` |
-| Minimum Home Assistant version | `2026.3.0` |
-| Runtime model | local UniFi Protect login, managed Protect webhooks, local push into Home Assistant |
-| CLI requirement | none; the CLI is optional and installed from a separate repository |
-| Brand assets | shipped locally in `custom_components/unifi_protect_bridge/brand/` |
+| Install | HACS custom repository, Home Assistant config flow, reconfigure, reauth, options flow |
+| Protect side | Managed Alarm Manager webhook automations for supported detection sources |
+| Home Assistant side | Timestamp sensors, typed events, diagnostics, services, and restore support |
+| Face recognition | Known/unknown/person-of-interest events plus lazy named-face sensors when Protect sends names |
+| Safety | Credentials, host details, webhook IDs, and webhook URLs are redacted from diagnostics |
+| Compatibility | Custom integration domain `unifi_protect_bridge`, Home Assistant `2026.3.0+` |
 
-## Why This Project
-
-UniFi Protect can already send webhook-based automations, but maintaining those rules by hand gets tedious fast when you have multiple cameras and multiple detection types. UniFi Protect Bridge turns that into a normal Home Assistant integration flow and keeps the Protect side aligned automatically.
-
-| Auto-provisions Protect | Feels native in Home Assistant | Built for real debugging |
-| --- | --- | --- |
-| Creates and refreshes managed Protect webhook automations for supported detections. | HACS install, config flow, reconfigure, reauth, options flow, and services. | Supports Home Assistant diagnostics with credentials, host details, and webhook secrets redacted. |
-
-## How It Works
-
-```mermaid
-flowchart LR
-    Protect[UniFi Protect]
-    Bridge[UniFi Protect Bridge]
-    Automations[Managed Protect webhook automations]
-    Webhook[Home Assistant webhook endpoint]
-    Sensors[Timestamp sensors]
-    Events[Typed HA events]
-
-    Bridge --> Automations
-    Protect --> Automations
-    Automations --> Webhook
-    Webhook --> Bridge
-    Bridge --> Sensors
-    Bridge --> Events
-```
-
-After setup, the integration will:
-
-- log in to Protect
-- inspect cameras and their supported detections
-- create or replace managed Protect automations when needed
-- register a webhook endpoint in Home Assistant
-- normalize incoming payloads into sensors and events
-
-It only manages bridge-owned Protect automations. Current automations owned by
-you stay outside the bridge unless they use the managed prefix from this project.
-
-## Project Split
-
-This repository is the Home Assistant custom integration. It is the only
-repository you need for HACS installs.
-
-| Repository | Purpose | Required for HACS |
-| --- | --- | --- |
-| [`Hovborg/unifi-protect-bridge`](https://github.com/Hovborg/unifi-protect-bridge) | Home Assistant custom integration, config flow, sensors, events, services, diagnostics, and Protect webhook provisioning | yes |
-| [`Hovborg/unifi-protect-bridge-cli`](https://github.com/Hovborg/unifi-protect-bridge-cli) | Optional terminal helper for login checks, camera/automation inspection, diff/apply, and HA resync | no |
-
-Home Assistant does not shell out to the CLI. The integration logs in to UniFi
-Protect from the Home Assistant config entry and provisions bridge-owned Protect
-webhook automations itself.
-
-## Install With HACS
+## Quick Install
 
 1. Open **HACS** in Home Assistant.
-2. Open the top-right menu and select **Custom repositories**.
-3. Add integration repository URL `https://github.com/Hovborg/unifi-protect-bridge`.
+2. Open the top-right menu and choose **Custom repositories**.
+3. Add `https://github.com/Hovborg/unifi-protect-bridge`.
 4. Choose category **Integration**.
 5. Open **UniFi Protect Bridge** in HACS and click **Download**.
 6. Restart Home Assistant.
 7. Go to **Settings -> Devices & services -> Add Integration**.
 8. Search for **UniFi Protect Bridge**.
 
-> [!NOTE]
-> If the integration does not show up after restart, refresh the browser and try again.
+Direct HACS link:
 
-## Upgrade From Older Releases
+```text
+https://my.home-assistant.io/redirect/hacs_repository/?owner=Hovborg&repository=unifi-protect-bridge&category=integration
+```
 
-Version `0.2.9` renames the integration domain from `ha_protect_bridge` to
-`unifi_protect_bridge`.
+Manual install path:
 
-For existing installations:
+```text
+config/custom_components/unifi_protect_bridge/
+```
 
-1. Remove the old **HA Protect Bridge** integration entry from Home Assistant.
-2. Update the HACS repository URL to `https://github.com/Hovborg/unifi-protect-bridge`.
-3. Restart Home Assistant.
-4. Add **UniFi Protect Bridge** from **Settings -> Devices & services**.
-5. Update automations that call old services or listen for old events.
+## Configure
 
-Existing Protect-side automations with the old managed prefix are still recognized, so the
-bridge can update them instead of creating duplicate Protect rules.
+The config flow asks for:
 
-Home Assistant entity IDs may change after removing and adding the renamed integration.
-Check dashboards, automations, scripts, and helpers for old `ha_protect_bridge` service,
-event, or entity references after the upgrade.
-
-## Configure It
-
-When you add the integration, Home Assistant asks for:
-
-- `Protect host`
-- `Username`
-- `Password`
-- `Verify SSL certificate`
-- `Webhook base URL override` if Protect cannot reach Home Assistant's normal URL
+- Protect host
+- Username
+- Password
+- SSL verification choice
+- Optional webhook base URL override
 
 Use a dedicated local UniFi OS / Protect user for the integration. Avoid owner,
 UI.com SSO, and MFA accounts for automated local integrations.
 
-Once connected, Home Assistant will manage the Protect side for you.
+After setup, Home Assistant manages the Protect side. You do not need to copy a
+webhook URL into Protect manually.
 
-You can later use:
+Useful entry actions:
 
-- **Reconfigure** to change host, credentials, SSL choice, or webhook base URL
-- **Reauthenticate** if credentials stop working
-- **Options** to tune startup behavior
+- **Reconfigure** changes host, credentials, SSL choice, or webhook base URL.
+- **Reauthenticate** updates credentials when login stops working.
+- **Options** changes startup backfill behavior.
 
-The most important option today is **Initial event backfill limit**:
+The current option is **Initial event backfill limit**:
 
-- allowed range is `0` to `1000`
-- default is `500`
-- `0` disables event backfill entirely
-- lower values reduce startup and resync load
-- Protect is queried in pages of 100 events, even when this value is higher
+- `500` by default
+- `0` disables startup backfill
+- `1000` maximum
+- Protect is queried in pages of 100 events
 
-If you need a stable low-load setup, start with `0` and increase later only if you actually want historical timestamps filled in at startup.
+## What It Does
 
-## What You Get
+```mermaid
+flowchart LR
+    Protect[UniFi Protect]
+    Bridge[UniFi Protect Bridge]
+    Rules[Bridge-owned Protect automations]
+    Webhook[Home Assistant webhook endpoint]
+    Sensors[Timestamp sensors]
+    Events[Typed HA events]
 
-### On the Protect side
+    Bridge --> Rules
+    Protect --> Rules
+    Rules --> Webhook
+    Webhook --> Bridge
+    Bridge --> Sensors
+    Bridge --> Events
+```
 
-- one managed webhook automation per supported detection source
-- automatic refresh when camera capabilities change
-- consistent bridge-owned automation naming
-- legacy `HA Protect Bridge:` automations are recognized so renamed installs do
-  not create duplicate bridge rules
+During setup and resync, the integration:
 
-### In Home Assistant
+- logs in to UniFi Protect locally
+- reads the Protect bootstrap data
+- discovers cameras and supported detection sources
+- creates or replaces bridge-owned Protect webhook automations
+- removes stale bridge-owned automations when a source is no longer supported
+- registers the Home Assistant webhook endpoint
+- backfills recent Protect events when enabled
+- normalizes incoming webhook payloads into Home Assistant sensors and events
+
+The integration only manages automations using these prefixes:
+
+- `UniFi Protect Bridge:`
+- legacy `HA Protect Bridge:`
+
+User-created Protect automations outside those prefixes are left alone.
+
+## Home Assistant Entities
+
+The integration creates:
 
 - one bridge status sensor
-- one global timestamp sensor per managed detection type
-- one per-camera timestamp sensor for every supported source that camera exposes
-- typed HA events for every incoming detection
-- services for inspection and resync
-- local icon and logo assets for Home Assistant 2026.3+
+- one global timestamp sensor per managed detection source
+- one per-camera timestamp sensor per supported camera/source pair
+- lazy named-face timestamp sensors when Protect sends recognized face names
 
-Timestamp sensors show the last known detection time. On a fresh install, a
-sensor can be `unknown` until startup backfill or the first live Protect webhook
-supplies a timestamp for that camera/source pair. After a sensor has had a
-known value, the integration restores it across Home Assistant restarts.
+Example entity shapes:
 
-The bridge status sensor reports diagnostic counters such as `sensor_count`,
-`known_sensor_count`, `unknown_sensor_count`, source-level known/unknown counts,
-`last_backfill_event_count`, `last_backfill_error`, `webhook_count`,
-`unmatched_webhook_count`, `last_webhook_at`, `automation_sync_error_count`, and
-`automation_sync_errors`. The sensor counters only count detection timestamp
-sensors, not the bridge status sensor itself.
+```text
+sensor.<nvr>_bridge_bridge_status
+sensor.<nvr>_bridge_last_person
+sensor.<camera>_last_ring
+sensor.<camera>_last_vehicle
+sensor.<camera>_last_known_face
+sensor.<camera>_last_recognized_face_<name>
+```
 
-The integration registers these services:
+Timestamp sensors restore their last known value across Home Assistant restarts.
+On a fresh install, a sensor can be `unknown` until startup backfill or the first
+live webhook supplies a timestamp for that source.
 
-- `unifi_protect_bridge.show_setup_info`
-- `unifi_protect_bridge.resync`
+The bridge status sensor exposes operational counters such as:
 
-Entity IDs depend on your NVR and camera names, but they look like this:
+- `camera_count`
+- `managed_sources`
+- `managed_automation_count`
+- `automation_sync_error_count`
+- `sensor_count`
+- `known_sensor_count`
+- `unknown_sensor_count`
+- `last_backfill_event_count`
+- `last_backfill_error`
+- `webhook_count`
+- `last_webhook_at`
+- `unmatched_webhook_count`
+- `last_sync_error`
 
-- `sensor.<nvr>_bridge_bridge_status`
-- `sensor.<nvr>_bridge_last_person`
-- `sensor.<camera>_last_ring`
-- `sensor.<camera>_last_vehicle`
+## Recognized Faces
 
-### Blueprint Example
+UniFi Protect remains the source of truth for face training and names. Add and
+rename people inside Protect. The bridge reads what Protect sends and exposes it
+inside Home Assistant.
 
-The repository includes an example automation blueprint at
-`blueprints/automation/unifi_protect_bridge/react_to_detection.yaml`.
+Every face recognition webhook can expose:
 
-HACS installs this repository as an integration under `custom_components/`.
-Home Assistant does not automatically import top-level blueprint files from a
-HACS integration download, so import or copy the blueprint manually if you want
-to use it.
+- `trigger_values`
+- `recognized_face_names`
+- `primary_recognized_face`
 
-Every incoming webhook fires `unifi_protect_bridge_webhook`. Recognized detections also fire:
+When Protect sends a named face, the bridge creates timestamp sensors for that
+name:
+
+- one global `Last recognized face <name>` sensor
+- one camera-specific `Last recognized face <name>` sensor
+
+Named-face sensors are created lazily because Protect does not provide a
+documented local endpoint for listing every trained face profile. Once Home
+Assistant has created a named-face sensor, the bridge keeps it across restarts
+using the entity registry.
+
+Example automation condition:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: unifi_protect_bridge_face_known
+conditions:
+  - condition: template
+    value_template: "{{ 'Alice' in trigger.event.data.recognized_face_names }}"
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      message: "Alice was seen by {{ trigger.event.data.matched_camera_names | join(', ') }}"
+```
+
+## Events
+
+Every incoming webhook fires:
+
+- `unifi_protect_bridge_webhook`
+
+Recognized detections also fire:
 
 - `unifi_protect_bridge_detection`
 - `unifi_protect_bridge_motion`
@@ -258,44 +263,10 @@ Every incoming webhook fires `unifi_protect_bridge_webhook`. Recognized detectio
 - `unifi_protect_bridge_audio_alarm_smoke`
 - `unifi_protect_bridge_audio_alarm_speak`
 
-Webhook events expose sanitized metadata only. For face recognition alarms,
-Protect can include the recognized value on the trigger. The bridge exposes that
-as:
-
-- `trigger_values`
-- `recognized_face_names`
-- `primary_recognized_face`
-
-Face names and training still belong in UniFi Protect. The bridge reads what
-Protect sends and makes it usable in Home Assistant automations; it does not
-create or rename Protect face profiles.
-
-When a named face is seen, the bridge also creates timestamp sensors for that
-name:
-
-- one global `Last recognized face <name>` sensor
-- one `Last recognized face <name>` sensor on the camera that triggered the alarm
-
-These sensors are created lazily from live webhook payloads because Protect does
-not provide a documented local API for listing every trained face profile. After
-Home Assistant has created a named-face sensor once, the bridge keeps it across
-restarts using the entity registry.
-
-Example person-specific automation condition:
-
-```yaml
-triggers:
-  - trigger: event
-    event_type: unifi_protect_bridge_face_known
-conditions:
-  - condition: template
-    value_template: "{{ 'Alice' in trigger.event.data.recognized_face_names }}"
-```
+Event payloads are sanitized. Raw webhook payloads, webhook IDs, headers, and
+secrets are not exposed on Home Assistant events.
 
 ## Supported Detections
-
-The current automatic coverage focuses on Protect detection families exposed by
-the local Protect API and normalized by this integration.
 
 | Group | Detection types |
 | --- | --- |
@@ -304,87 +275,134 @@ the local Protect API and normalized by this integration.
 | Face | `face`, `face_unknown`, `face_known`, `face_of_interest` |
 | License plate | `license_plate_of_interest` |
 | Audio alarms | `audio_alarm_baby_cry`, `audio_alarm_bark`, `audio_alarm_burglar`, `audio_alarm_car_horn`, `audio_alarm_co`, `audio_alarm_glass_break`, `audio_alarm_siren`, `audio_alarm_smoke`, `audio_alarm_speak` |
+| Named faces | dynamic `recognized_face` timestamp sensors when Protect sends a name |
+
+## Services
+
+The integration registers:
+
+- `unifi_protect_bridge.show_setup_info`
+- `unifi_protect_bridge.resync`
+
+Use `resync` after changing cameras, detection capabilities, or Protect-side
+settings that affect Alarm Manager sources.
+
+## Blueprint Example
+
+The repository includes an example automation blueprint:
+
+```text
+blueprints/automation/unifi_protect_bridge/react_to_detection.yaml
+```
+
+HACS installs this repository as an integration under `custom_components/`.
+Home Assistant does not automatically import top-level blueprint files from a
+HACS integration download, so import or copy the blueprint manually if you want
+to use it.
+
+## Upgrade From Older Releases
+
+Version `0.2.9` renamed the integration domain from `ha_protect_bridge` to
+`unifi_protect_bridge`.
+
+For old installs:
+
+1. Remove the old **HA Protect Bridge** integration entry from Home Assistant.
+2. Update the HACS repository URL to `https://github.com/Hovborg/unifi-protect-bridge`.
+3. Restart Home Assistant.
+4. Add **UniFi Protect Bridge** from **Settings -> Devices & services**.
+5. Update automations that reference old services, events, or entity IDs.
+
+Protect automations with the old `HA Protect Bridge:` prefix are still
+recognized so the bridge can update them instead of creating duplicate rules.
+
+## Branding And HACS Icon
+
+Home Assistant 2026.3 and newer can load brand assets directly from custom
+integrations. UniFi Protect Bridge ships those local assets in:
+
+```text
+custom_components/unifi_protect_bridge/brand/
+```
+
+The domain must stay aligned with the manifest domain:
+
+```text
+unifi_protect_bridge
+```
+
+Remote HACS and Home Assistant views can also use the Home Assistant Brands CDN
+path:
+
+```text
+https://brands.home-assistant.io/_/unifi_protect_bridge/icon.png
+```
+
+Home Assistant and HACS cache brand images. After a release or Brands update, it
+can take time before every UI location refreshes the icon.
 
 ## Troubleshooting
 
 ### Protect cannot reach Home Assistant
 
-By default, the bridge asks Home Assistant for the best instance URL and prefers
-the internal/local URL when Home Assistant has one. Open **Settings** ->
-**Devices & services** -> **UniFi Protect Bridge** -> **Reconfigure**, then set
-**Webhook base URL override** if Protect still cannot call the selected Home
-Assistant URL.
+Open **Settings -> Devices & services -> UniFi Protect Bridge -> Reconfigure**
+and set **Webhook base URL override** to a URL Protect can reach, for example:
 
-On a LAN install, this is often the local Home Assistant URL, for example
-`http://192.168.1.190:8123`. Enter only the base URL, with no
-`/api/webhook/...` path, query string, or webhook token. If timestamp sensors
-stay `unknown` and the Bridge Status sensor has no `last_webhook_at`, Protect
-has not delivered a live webhook to Home Assistant yet.
+```text
+http://192.168.1.190:8123
+```
 
-### Home Assistant startup feels heavy
+Enter only the base URL. Do not include `/api/webhook/...`, query strings, or
+the webhook token.
 
-Open the integration **Options** and set **Initial event backfill limit** lower, or set it to `0` to disable startup backfill completely.
+### Timestamp sensors stay unknown
 
-### You want a clean support dump
+Check the bridge status sensor:
 
-Use Home Assistant's normal **Download diagnostics** action on the config entry. The integration redacts:
+- `last_webhook_at` tells you whether Protect has delivered a live webhook.
+- `last_backfill_error` tells you whether recent event backfill failed.
+- `automation_sync_error_count` tells you whether Protect rejected any managed
+  rule.
+
+Some sources can remain `unknown` until that detection actually happens.
+
+### Startup feels heavy
+
+Open **Options** and lower **Initial event backfill limit**, or set it to `0` to
+disable startup backfill.
+
+### You need a support dump
+
+Use Home Assistant's **Download diagnostics** action on the config entry. The
+integration redacts:
 
 - username
 - password
 - host
-- webhook id
+- webhook ID
 - webhook URL details
-
-### You changed cameras or detection capabilities
-
-Call:
-
-- `unifi_protect_bridge.resync`
-
-That will rebuild the catalog and refresh managed automations when needed.
-
-## Manual Install
-
-If you do not want to use HACS, copy `custom_components/unifi_protect_bridge` into your Home Assistant config directory so the final path is:
-
-```text
-config/custom_components/unifi_protect_bridge/
-```
-
-Then restart Home Assistant and add the integration from **Settings -> Devices & services**.
-
-## HACS And GitHub Links
-
-- HACS custom repository docs: <https://www.hacs.xyz/docs/faq/custom_repositories/>
-- HACS download docs: <https://www.hacs.xyz/docs/use/download/download/>
-- My Home Assistant HACS links: <https://www.hacs.xyz/docs/use/my/>
-- Latest GitHub release: <https://github.com/Hovborg/unifi-protect-bridge/releases/latest>
-- Issue tracker: <https://github.com/Hovborg/unifi-protect-bridge/issues>
-- Optional CLI repository: <https://github.com/Hovborg/unifi-protect-bridge-cli>
 
 ## Technical Note
 
-> [!IMPORTANT]
-> Automatic provisioning uses UniFi Protect's private `/proxy/protect/api/automations` endpoint.
->
-> That private API is what makes zero-manual setup possible, but it also means future Protect updates may require compatibility fixes in this integration.
-
-The integration only manages Protect automations that use the bridge-owned
-prefix `UniFi Protect Bridge:` or the legacy prefix `HA Protect Bridge:`. It
-does not take ownership of user-created Protect automations.
+Automatic provisioning uses UniFi Protect's private
+`/proxy/protect/api/automations` endpoint. That private API is what makes the
+zero-manual Protect setup possible, but future Protect updates can require
+compatibility fixes.
 
 ## Optional CLI
 
-The CLI has moved to its own repository:
+The CLI lives in a separate repository:
 
-<https://github.com/Hovborg/unifi-protect-bridge-cli>
+```text
+https://github.com/Hovborg/unifi-protect-bridge-cli
+```
 
-You do not need the CLI for a HACS install. Home Assistant runs this integration
-directly, logs in to UniFi Protect from the config entry, and provisions the
-bridge-owned Protect webhook automations itself.
+Home Assistant does not run the CLI. The HACS integration logs in to UniFi
+Protect from its config entry and provisions bridge-owned Protect automations
+itself.
 
-Use the separate CLI only for terminal-based diagnostics, Protect login checks,
-diff/apply support, and calling the integration resync service manually.
+Use the CLI only for terminal diagnostics, Protect login checks, camera and
+automation inspection, diff/apply support, and manual HA resync calls.
 
 Current CLI quick start:
 
@@ -394,7 +412,7 @@ upb login --save-password
 upb cameras
 ```
 
-See [`docs/project-split.md`](docs/project-split.md) for the repository split
+See [docs/project-split.md](docs/project-split.md) for the integration/CLI split
 and shared contract.
 
 ## Development
@@ -408,4 +426,20 @@ ruff check .
 pytest
 ```
 
-For GitHub-specific maintainer tasks, prefer GitHub CLI (`gh`) over email or browser triage when available. In practice that means `gh run list`, `gh run view`, `gh workflow list`, `gh pr status`, and `gh api` for workflow and repository state inspection, while normal local repository work still uses plain `git`.
+GitHub-specific maintainer tasks should use GitHub CLI when available:
+
+```bash
+gh run list
+gh run view
+gh workflow list
+gh pr status
+gh api
+```
+
+## Links
+
+- Latest release: <https://github.com/Hovborg/unifi-protect-bridge/releases/latest>
+- Issues: <https://github.com/Hovborg/unifi-protect-bridge/issues>
+- HACS custom repositories: <https://www.hacs.xyz/docs/faq/custom_repositories/>
+- My Home Assistant HACS links: <https://www.hacs.xyz/docs/use/my/>
+- Optional CLI: <https://github.com/Hovborg/unifi-protect-bridge-cli>
