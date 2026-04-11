@@ -166,6 +166,16 @@ def test_reconfigure_flow_rejects_different_nvr(monkeypatch: pytest.MonkeyPatch)
         )
 
 
+def test_webhook_base_url_validator_requires_absolute_http_url() -> None:
+    assert config_flow._validate_webhook_base_url(" http://ha.local:8123/ ") == (
+        "http://ha.local:8123"
+    )
+    assert config_flow._validate_webhook_base_url("") == ""
+
+    with pytest.raises(config_flow.vol.Invalid):
+        config_flow._validate_webhook_base_url("ha.local:8123")
+
+
 def _mock_entry() -> Any:
     return SimpleNamespace(
         entry_id="entry-1",

@@ -172,9 +172,11 @@ You can later use:
 
 The most important option today is **Initial event backfill limit**:
 
-- allowed range is `0` to `100`
+- allowed range is `0` to `1000`
+- default is `500`
 - `0` disables event backfill entirely
 - lower values reduce startup and resync load
+- Protect is queried in pages of 100 events, even when this value is higher
 
 If you need a stable low-load setup, start with `0` and increase later only if you actually want historical timestamps filled in at startup.
 
@@ -195,6 +197,15 @@ If you need a stable low-load setup, start with `0` and increase later only if y
 - one per-camera timestamp sensor for every supported source that camera exposes
 - typed HA events for every incoming detection
 - services for inspection and resync
+
+Timestamp sensors show the last known detection time. On a fresh install, a
+sensor can be `unknown` until startup backfill or the first live Protect webhook
+supplies a timestamp for that camera/source pair. After a sensor has had a
+known value, the integration restores it across Home Assistant restarts.
+
+The bridge status sensor reports diagnostic counters such as `sensor_count`,
+`known_sensor_count`, `unknown_sensor_count`, `last_backfill_event_count`,
+`last_backfill_changed_event_count`, and `last_webhook_at`.
 
 The integration registers these services:
 
@@ -248,7 +259,16 @@ the local Protect API and normalized by this integration.
 
 ### Protect cannot reach Home Assistant
 
-Set **Webhook base URL override** in the integration if Protect cannot call Home Assistant using the default generated URL.
+By default, the bridge asks Home Assistant for the best instance URL and prefers
+the internal/local URL when Home Assistant has one. Open **Settings** ->
+**Devices & services** -> **UniFi Protect Bridge** -> **Reconfigure**, then set
+**Webhook base URL override** if Protect still cannot call the selected Home
+Assistant URL.
+
+On a LAN install, this is often the local Home Assistant URL, for example
+`http://192.168.1.190:8123`. If timestamp sensors stay `unknown` and the
+Bridge Status sensor has no `last_webhook_at`, Protect has not delivered a live
+webhook to Home Assistant yet.
 
 ### Home Assistant startup feels heavy
 

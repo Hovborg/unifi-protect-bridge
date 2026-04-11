@@ -28,7 +28,7 @@ from .const import (
     SOURCE_ICONS,
 )
 from .normalize import normalize_event_payload
-from .protect_api import ProtectApiClient, ProtectApiError
+from .protect_api import PROTECT_EVENTS_REQUEST_LIMIT, ProtectApiClient, ProtectApiError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,7 +66,10 @@ class HaProtectBridgeRuntime:
         self._event_summaries: dict[str, dict[str, Any]] = {}
         self._managed_automations: dict[str, dict[str, Any]] = {}
         self._webhook_url: str | None = None
+        self._webhook_url_source: str | None = None
         self._webhook_path = webhook.async_generate_path(entry.data[CONF_WEBHOOK_ID])
+        self._last_backfill_event_count = 0
+        self._last_backfill_applied_count = 0
         self.last_sync_at: datetime | None = None
         self.last_sync_error: str | None = None
         self.last_webhook_at: datetime | None = None
@@ -119,10 +122,8 @@ class HaProtectBridgeRuntime:
     async def async_process_webhook(self, normalized: dict[str, Any]) -> list[dict[str, Any]]:
         timestamp = _timestamp_from_normalized(normalized)
         self.last_webhook_at = datetime.now(UTC)
-        changed, matched_cameras = self._apply_normalized_event(normalized, timestamp)
-
-        if changed:
-            self._notify_listeners()
+        _changed, matched_cameras = self._apply_normalized_event(normalized, timestamp)
+        self._notify_listeners()
 
         return matched_cameras
 
@@ -170,11 +171,20 @@ class HaProtectBridgeRuntime:
         return attributes
 
     def get_status_attributes(self) -> dict[str, Any]:
+        active_sensor_keys = set(self._sensor_specs)
+        known_sensor_count = sum(1 for key in self._timestamps if key in active_sensor_keys)
+        webhook_url_source = self._webhook_url_source
+        if webhook_url_source is None and self.entry.data.get(CONF_WEBHOOK_BASE_URL):
+            webhook_url_source = "override"
         return {
             "host": self.entry.data[CONF_HOST],
             "verify_ssl": self.entry.data[CONF_VERIFY_SSL],
             "event_backfill_limit": self._event_backfill_limit(),
+            "last_backfill_event_count": self._last_backfill_event_count,
+            "last_backfill_changed_event_count": self._last_backfill_applied_count,
+            "last_backfill_applied_count": self._last_backfill_applied_count,
             "webhook_configured": self.webhook_url is not None,
+            "webhook_url_source": webhook_url_source,
             "webhook_base_url_override_configured": bool(
                 self.entry.data.get(CONF_WEBHOOK_BASE_URL)
             ),
@@ -183,10 +193,31 @@ class HaProtectBridgeRuntime:
             "camera_count": len(self.catalog.get("cameras") or []),
             "managed_sources": self.managed_sources,
             "managed_automation_count": self.managed_automation_count,
+            "sensor_count": len(active_sensor_keys),
+            "known_sensor_count": known_sensor_count,
+            "unknown_sensor_count": len(active_sensor_keys) - known_sensor_count,
             "last_sync_at": _isoformat(self.last_sync_at),
             "last_sync_error": self.last_sync_error,
             "last_webhook_at": _isoformat(self.last_webhook_at),
         }
+
+    def restore_sensor_state(
+        self,
+        sensor_key: str,
+        timestamp: datetime,
+        attributes: dict[str, Any],
+    ) -> bool:
+        if sensor_key not in self._sensor_specs:
+            return False
+
+        existing = self._timestamps.get(sensor_key)
+        if existing is not None and existing >= timestamp:
+            return False
+
+        self._timestamps[sensor_key] = timestamp
+        self._event_summaries[sensor_key] = _restored_event_summary(attributes, timestamp)
+        self._notify_listeners()
+        return True
 
     def bridge_device_info(self) -> DeviceInfo:
         host = self.entry.data[CONF_HOST]
@@ -212,7 +243,19 @@ class HaProtectBridgeRuntime:
     def _build_webhook_url(self) -> str:
         override = (self.entry.data.get(CONF_WEBHOOK_BASE_URL) or "").strip()
         if override:
+            self._webhook_url_source = "override"
             return f"{override.rstrip('/')}" + self.webhook_path
+
+        try:
+            from homeassistant.helpers import network
+
+            base_url = network.get_url(self.hass)
+        except Exception:
+            base_url = None
+
+        if base_url:
+            self._webhook_url_source = "home_assistant_instance_url"
+            return f"{base_url.rstrip('/')}" + self.webhook_path
 
         try:
             generated = webhook.async_generate_url(self.hass, self.entry.data[CONF_WEBHOOK_ID])
@@ -225,6 +268,7 @@ class HaProtectBridgeRuntime:
             raise ProtectApiError(
                 "Home Assistant returned an empty webhook URL. Set webhook_base_url."
             )
+        self._webhook_url_source = "home_assistant_generated"
         return generated
 
     async def _async_sync_managed_automations(self, automations: list[dict[str, Any]]) -> None:
@@ -332,26 +376,52 @@ class HaProtectBridgeRuntime:
 
     async def _async_backfill_recent_events(self) -> None:
         limit = self._event_backfill_limit()
+        self._last_backfill_event_count = 0
+        self._last_backfill_applied_count = 0
         if limit <= 0:
             _LOGGER.debug("Skipping Protect event backfill because limit is %s", limit)
             return
 
-        try:
-            events = await self._api.async_get_events(
-                limit=limit,
-                types=list(BACKFILL_EVENT_TYPES),
-                sorting="desc",
-            )
-        except ProtectApiError as err:
-            _LOGGER.warning("Could not backfill Protect events: %s", err)
-            return
+        remaining = limit
+        offset = 0
+        seen_event_ids: set[str] = set()
+        while remaining > 0:
+            page_limit = min(PROTECT_EVENTS_REQUEST_LIMIT, remaining)
+            try:
+                events = await self._api.async_get_events(
+                    limit=page_limit,
+                    offset=offset,
+                    types=list(BACKFILL_EVENT_TYPES),
+                    sorting="desc",
+                )
+            except ProtectApiError as err:
+                _LOGGER.warning("Could not backfill Protect events: %s", err)
+                return
 
-        for event in events:
-            normalized = normalize_event_payload(event)
-            if not normalized.get("detection_types"):
-                continue
-            timestamp = _timestamp_from_normalized(normalized)
-            self._apply_normalized_event(normalized, timestamp)
+            if not events:
+                return
+
+            for event in events:
+                event_id = _event_id(event)
+                if event_id and event_id in seen_event_ids:
+                    continue
+                if event_id:
+                    seen_event_ids.add(event_id)
+
+                self._last_backfill_event_count += 1
+                normalized = normalize_event_payload(event)
+                if not normalized.get("detection_types"):
+                    continue
+                timestamp = _timestamp_from_normalized(normalized)
+                changed, _matched_cameras = self._apply_normalized_event(normalized, timestamp)
+                if changed:
+                    self._last_backfill_applied_count += 1
+
+            if len(events) < page_limit:
+                return
+
+            offset += len(events)
+            remaining -= len(events)
 
     def _event_backfill_limit(self) -> int:
         value = self.entry.options.get(
@@ -445,6 +515,23 @@ def _event_summary(normalized: dict[str, Any]) -> dict[str, Any]:
         "last_device_ids": list(normalized.get("device_ids") or []),
         "last_timestamp": normalized.get("timestamp_iso"),
     }
+
+
+def _restored_event_summary(attributes: dict[str, Any], timestamp: datetime) -> dict[str, Any]:
+    summary = {
+        "last_alarm_name": attributes.get("last_alarm_name"),
+        "last_detection_types": list(attributes.get("last_detection_types") or []),
+        "last_device_ids": list(attributes.get("last_device_ids") or []),
+        "last_timestamp": attributes.get("last_timestamp") or timestamp.isoformat(),
+    }
+    return {key: value for key, value in summary.items() if value not in (None, [], "")}
+
+
+def _event_id(event: dict[str, Any]) -> str | None:
+    event_id = event.get("id") or event.get("_id")
+    if event_id is None:
+        return None
+    return str(event_id)
 
 
 def _isoformat(value: datetime | None) -> str | None:

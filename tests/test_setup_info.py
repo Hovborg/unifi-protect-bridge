@@ -19,6 +19,8 @@ def test_build_setup_message_includes_setup_status_and_sources() -> None:
     assert "Managed automation count: `2`" in message
     assert "unifi_protect_bridge_person" in message
     assert "unifi_protect_bridge_animal" in message
+    assert "last_webhook_at" in message
+    assert "Webhook base URL override" in message
     assert "Operational note:" in message
 
 

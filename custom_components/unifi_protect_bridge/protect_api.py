@@ -9,6 +9,8 @@ import aiohttp
 
 from .const import DEFAULT_TIMEOUT_SECONDS
 
+PROTECT_EVENTS_REQUEST_LIMIT = 100
+
 
 class ProtectApiError(Exception):
     """Generic Protect API failure."""
@@ -79,15 +81,18 @@ class ProtectApiClient:
     async def async_get_events(
         self,
         *,
-        limit: int = 250,
+        limit: int = PROTECT_EVENTS_REQUEST_LIMIT,
+        offset: int | None = None,
         types: list[str] | None = None,
         sorting: str = "desc",
     ) -> list[dict[str, Any]]:
         params: dict[str, Any] = {
-            "limit": limit,
+            "limit": max(1, min(int(limit), PROTECT_EVENTS_REQUEST_LIMIT)),
             "orderDirection": sorting.upper(),
             "withoutDescriptions": "true",
         }
+        if offset is not None:
+            params["offset"] = max(0, int(offset))
         if types:
             params["types"] = types
 

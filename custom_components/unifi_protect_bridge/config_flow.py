@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlsplit
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -152,7 +153,7 @@ def _build_full_schema(
             vol.Optional(
                 CONF_WEBHOOK_BASE_URL,
                 default=defaults.get(CONF_WEBHOOK_BASE_URL, ""),
-            ): str,
+            ): _validate_webhook_base_url,
         }
     )
 
@@ -303,6 +304,17 @@ def _clean_backfill_limit(value: Any) -> int:
     except (TypeError, ValueError):
         return DEFAULT_EVENT_BACKFILL_LIMIT
     return max(0, min(limit, MAX_EVENT_BACKFILL_LIMIT))
+
+
+def _validate_webhook_base_url(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    parsed = urlsplit(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise vol.Invalid("webhook_base_url")
+    return text.rstrip("/")
 
 
 async def _async_validate_input(user_input: dict[str, Any]) -> dict[str, str | None]:

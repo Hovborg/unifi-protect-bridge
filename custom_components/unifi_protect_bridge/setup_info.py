@@ -45,6 +45,14 @@ def build_setup_message(
     lines.extend(
         [
             "",
+            "Troubleshooting:",
+            (
+                "If timestamp sensors stay unknown and the Bridge Status sensor shows no "
+                "`last_webhook_at`, open the integration Reconfigure flow and set "
+                "`Webhook base URL override` to a Home Assistant URL that UniFi Protect "
+                "can reach, such as your local LAN URL."
+            ),
+            "",
             "Operational note:",
             (
                 "Managed automations are created through UniFi Protect's private "

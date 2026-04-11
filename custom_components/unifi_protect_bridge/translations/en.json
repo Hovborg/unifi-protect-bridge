@@ -35,6 +35,7 @@
     "error": {
       "cannot_connect": "Failed to connect to UniFi Protect.",
       "invalid_auth": "Invalid Protect username or password.",
+      "webhook_base_url": "Webhook base URL must be an absolute http:// or https:// URL.",
       "unknown": "Unexpected error while setting up the bridge."
     },
     "abort": {
@@ -48,7 +49,7 @@
     "step": {
       "init": {
         "title": "Tune UniFi Protect Bridge",
-        "description": "Adjust startup backfill behavior. Set the backfill limit to 0 to disable recent-event backfill during initialization and resync.",
+        "description": "Adjust startup backfill behavior. Default is 500 recent events, maximum is 1000, and 0 disables recent-event backfill during initialization and resync.",
         "data": {
           "event_backfill_limit": "Initial event backfill limit"
         }

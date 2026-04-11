@@ -21,6 +21,8 @@ def _install_homeassistant_stubs() -> None:
     config_validation = ModuleType("homeassistant.helpers.config_validation")
     device_registry = ModuleType("homeassistant.helpers.device_registry")
     entity = ModuleType("homeassistant.helpers.entity")
+    network = ModuleType("homeassistant.helpers.network")
+    restore_state = ModuleType("homeassistant.helpers.restore_state")
 
     class ConfigFlow:
         def __init_subclass__(cls, **kwargs) -> None:
@@ -119,15 +121,25 @@ def _install_homeassistant_stubs() -> None:
         def async_on_remove(self, _remove_callback) -> None:
             return None
 
+        def async_write_ha_state(self) -> None:
+            return None
+
         @property
         def unique_id(self) -> str | None:
             return getattr(self, "_attr_unique_id", None)
+
+    class RestoreEntity:
+        async def async_get_last_state(self):
+            return None
 
     class SensorDeviceClass:
         TIMESTAMP = "timestamp"
 
     class EntityCategory:
         DIAGNOSTIC = "diagnostic"
+
+    class NoURLAvailableError(Exception):
+        pass
 
     class DeviceInfo(dict):
         pass
@@ -192,6 +204,8 @@ def _install_homeassistant_stubs() -> None:
     config_entries.SOURCE_USER = "user"
     sensor_module.SensorDeviceClass = SensorDeviceClass
     sensor_module.SensorEntity = SensorEntity
+    network.NoURLAvailableError = NoURLAvailableError
+    network.get_url = lambda _hass: "http://ha.local:8123"
     core.CALLBACK_TYPE = object
     core.HomeAssistant = object
     core.callback = callback
@@ -207,6 +221,7 @@ def _install_homeassistant_stubs() -> None:
     config_validation.config_entry_only_config_schema = lambda domain: {"domain": domain}
     device_registry.DeviceInfo = DeviceInfo
     entity.EntityCategory = EntityCategory
+    restore_state.RestoreEntity = RestoreEntity
 
     components.webhook = webhook
     components.persistent_notification = persistent_notification
@@ -215,6 +230,8 @@ def _install_homeassistant_stubs() -> None:
     helpers.config_validation = config_validation
     helpers.device_registry = device_registry
     helpers.entity = entity
+    helpers.network = network
+    helpers.restore_state = restore_state
     homeassistant.components = components
     homeassistant.config_entries = config_entries
     homeassistant.core = core
@@ -234,6 +251,8 @@ def _install_homeassistant_stubs() -> None:
     sys.modules["homeassistant.helpers.config_validation"] = config_validation
     sys.modules["homeassistant.helpers.device_registry"] = device_registry
     sys.modules["homeassistant.helpers.entity"] = entity
+    sys.modules["homeassistant.helpers.network"] = network
+    sys.modules["homeassistant.helpers.restore_state"] = restore_state
 
 
 _install_homeassistant_stubs()

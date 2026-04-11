@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
+
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from custom_components.unifi_protect_bridge.runtime import BridgeSensorSpec
 from custom_components.unifi_protect_bridge.sensor import (
@@ -14,6 +18,8 @@ class FakeRuntime:
     def __init__(self, specs: list[BridgeSensorSpec]) -> None:
         self.entry = SimpleNamespace(entry_id="entry-1")
         self._specs = {spec.key: spec for spec in specs}
+        self._states = {}
+        self._restored = []
         self._listeners = []
 
     def iter_sensor_specs(self) -> list[BridgeSensorSpec]:
@@ -22,8 +28,13 @@ class FakeRuntime:
     def has_sensor_spec(self, sensor_key: str) -> bool:
         return sensor_key in self._specs
 
-    def get_sensor_state(self, sensor_key: str) -> None:
-        return None
+    def get_sensor_state(self, sensor_key: str):
+        return self._states.get(sensor_key)
+
+    def restore_sensor_state(self, sensor_key: str, timestamp, attributes: dict) -> bool:
+        self._states[sensor_key] = timestamp
+        self._restored.append((sensor_key, timestamp, attributes))
+        return True
 
     def get_sensor_attributes(self, sensor_key: str) -> dict[str, str]:
         spec = self._specs[sensor_key]
@@ -99,6 +110,12 @@ def test_async_setup_entry_adds_new_timestamp_entities_on_runtime_update() -> No
     assert add_calls[-1] == ["entry-1_camera-1_person"]
 
 
+def test_timestamp_sensor_restore_mixin_precedes_sensor_entity() -> None:
+    mro = HaProtectBridgeTimestampSensor.mro()
+
+    assert mro.index(RestoreEntity) < mro.index(SensorEntity)
+
+
 def test_timestamp_sensor_becomes_unavailable_when_spec_is_removed() -> None:
     spec = BridgeSensorSpec(
         key="camera-1:person",
@@ -122,3 +139,41 @@ def test_timestamp_sensor_becomes_unavailable_when_spec_is_removed() -> None:
         "source_label": "person",
         "camera_key": "camera-1",
     }
+
+
+def test_timestamp_sensor_restores_last_state() -> None:
+    spec = BridgeSensorSpec(
+        key="camera-1:person",
+        unique_id="entry-1_camera-1_person",
+        name="Last person",
+        icon=None,
+        source="person",
+        camera_key="camera-1",
+    )
+    runtime = FakeRuntime([spec])
+    entity = HaProtectBridgeTimestampSensor(runtime, spec)
+    last_state = SimpleNamespace(
+        state="2026-04-11T01:02:03+00:00",
+        attributes={
+            "last_alarm_name": "smartDetectZone",
+            "last_detection_types": ["person"],
+            "last_device_ids": ["camera-id"],
+            "last_timestamp": "2026-04-11T01:02:03+00:00",
+        },
+    )
+
+    async def _async_get_last_state():
+        return last_state
+
+    entity.async_get_last_state = _async_get_last_state
+
+    asyncio.run(entity.async_added_to_hass())
+
+    assert runtime._restored == [
+        (
+            "camera-1:person",
+            datetime(2026, 4, 11, 1, 2, 3, tzinfo=UTC),
+            last_state.attributes,
+        )
+    ]
+    assert entity.native_value == datetime(2026, 4, 11, 1, 2, 3, tzinfo=UTC)

@@ -9,7 +9,7 @@ from custom_components.unifi_protect_bridge.config_flow import (
 )
 from custom_components.unifi_protect_bridge.const import (
     CONF_EVENT_BACKFILL_LIMIT,
-    DEFAULT_EVENT_BACKFILL_LIMIT,
+    MAX_EVENT_BACKFILL_LIMIT,
 )
 
 
@@ -43,9 +43,9 @@ def test_options_flow_clamps_invalid_backfill_limit() -> None:
     result = asyncio.run(
         handler.async_step_init(
             {
-                CONF_EVENT_BACKFILL_LIMIT: 999,
+                CONF_EVENT_BACKFILL_LIMIT: MAX_EVENT_BACKFILL_LIMIT + 1,
             }
         )
     )
 
-    assert result["data"] == {CONF_EVENT_BACKFILL_LIMIT: DEFAULT_EVENT_BACKFILL_LIMIT}
+    assert result["data"] == {CONF_EVENT_BACKFILL_LIMIT: MAX_EVENT_BACKFILL_LIMIT}

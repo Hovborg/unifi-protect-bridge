@@ -4,6 +4,9 @@ import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+from homeassistant.components import webhook
+from homeassistant.helpers import network
+
 from custom_components.unifi_protect_bridge.const import (
     CONF_EVENT_BACKFILL_LIMIT,
     CONF_HOST,
@@ -14,7 +17,7 @@ from custom_components.unifi_protect_bridge.const import (
     DEFAULT_EVENT_BACKFILL_LIMIT,
     MAX_EVENT_BACKFILL_LIMIT,
 )
-from custom_components.unifi_protect_bridge.runtime import HaProtectBridgeRuntime
+from custom_components.unifi_protect_bridge.runtime import BridgeSensorSpec, HaProtectBridgeRuntime
 
 
 def test_runtime_backfill_limit_uses_default_and_clamps_options() -> None:
@@ -26,7 +29,7 @@ def test_runtime_backfill_limit_uses_default_and_clamps_options() -> None:
 
     runtime = HaProtectBridgeRuntime(
         SimpleNamespace(),
-        _mock_entry({CONF_EVENT_BACKFILL_LIMIT: 999}),
+        _mock_entry({CONF_EVENT_BACKFILL_LIMIT: MAX_EVENT_BACKFILL_LIMIT + 1}),
     )
     assert runtime._event_backfill_limit() == MAX_EVENT_BACKFILL_LIMIT
 
@@ -49,18 +52,129 @@ def test_runtime_backfill_skips_event_fetch_when_limit_is_zero() -> None:
     asyncio.run(runtime._async_backfill_recent_events())
 
     assert called is False
+    assert runtime.get_status_attributes()["last_backfill_event_count"] == 0
+    assert runtime.get_status_attributes()["last_backfill_applied_count"] == 0
+
+
+def test_runtime_backfill_tracks_event_and_applied_counts() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    runtime._sensor_specs = {
+        "global:person": BridgeSensorSpec(
+            key="global:person",
+            unique_id="entry-1_global_person",
+            name="Last person",
+            icon=None,
+            source="person",
+        )
+    }
+
+    async def _async_get_events(**kwargs):
+        del kwargs
+        return [
+            {
+                "type": "smartDetectZone",
+                "smartDetectTypes": ["person"],
+                "timestamp": 1770000000000,
+            },
+            {
+                "type": "unknownEvent",
+                "timestamp": 1770000001000,
+            },
+        ]
+
+    runtime._api.async_get_events = _async_get_events
+
+    asyncio.run(runtime._async_backfill_recent_events())
+
+    attributes = runtime.get_status_attributes()
+    assert attributes["last_backfill_event_count"] == 2
+    assert attributes["last_backfill_changed_event_count"] == 1
+    assert attributes["last_backfill_applied_count"] == 1
+    assert attributes["known_sensor_count"] == 1
+    assert attributes["unknown_sensor_count"] == 0
+
+
+def test_runtime_backfill_paginates_protect_events() -> None:
+    runtime = HaProtectBridgeRuntime(
+        SimpleNamespace(),
+        _mock_entry({CONF_EVENT_BACKFILL_LIMIT: 250}),
+    )
+    calls = []
+
+    async def _async_get_events(**kwargs):
+        calls.append(dict(kwargs))
+        offset = kwargs["offset"]
+        limit = kwargs["limit"]
+        return [
+            {
+                "id": f"event-{offset + index}",
+                "type": "unknownEvent",
+                "timestamp": 1770000000000 + index,
+            }
+            for index in range(limit)
+        ]
+
+    runtime._api.async_get_events = _async_get_events
+
+    asyncio.run(runtime._async_backfill_recent_events())
+
+    assert [call["limit"] for call in calls] == [100, 100, 50]
+    assert [call["offset"] for call in calls] == [0, 100, 200]
+    assert runtime.get_status_attributes()["last_backfill_event_count"] == 250
+
+
+def test_runtime_build_webhook_url_prefers_home_assistant_instance_url(monkeypatch) -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    monkeypatch.setattr(network, "get_url", lambda _hass: "http://ha.internal:8123")
+
+    assert runtime._build_webhook_url() == "http://ha.internal:8123/api/webhook/webhook-id"
+    assert runtime.get_status_attributes()["webhook_url_source"] == "home_assistant_instance_url"
+
+
+def test_runtime_build_webhook_url_falls_back_to_webhook_generated_url(monkeypatch) -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+
+    def _raise_no_url(_hass):
+        raise network.NoURLAvailableError
+
+    monkeypatch.setattr(network, "get_url", _raise_no_url)
+    monkeypatch.setattr(
+        webhook,
+        "async_generate_url",
+        lambda _hass, webhook_id: f"https://external.example/api/webhook/{webhook_id}",
+    )
+
+    assert (
+        runtime._build_webhook_url()
+        == "https://external.example/api/webhook/webhook-id"
+    )
+    assert runtime.get_status_attributes()["webhook_url_source"] == "home_assistant_generated"
 
 
 def test_runtime_status_attributes_do_not_expose_webhook_secret() -> None:
     runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
     runtime._webhook_url = "http://ha.local/api/webhook/secret"
+    runtime._webhook_url_source = "home_assistant_instance_url"
 
     attributes = runtime.get_status_attributes()
 
     assert "webhook_url" not in attributes
     assert "webhook_path" not in attributes
     assert attributes["webhook_configured"] is True
+    assert attributes["webhook_url_source"] == "home_assistant_instance_url"
     assert attributes["webhook_base_url_override_configured"] is False
+
+
+def test_runtime_status_attributes_report_webhook_override_source() -> None:
+    runtime = HaProtectBridgeRuntime(
+        SimpleNamespace(),
+        _mock_entry({}, data_updates={"webhook_base_url": "http://ha.local:8123"}),
+    )
+
+    attributes = runtime.get_status_attributes()
+
+    assert attributes["webhook_url_source"] == "override"
+    assert attributes["webhook_base_url_override_configured"] is True
 
 
 def test_runtime_last_webhook_at_uses_receive_time_not_event_timestamp() -> None:
@@ -83,6 +197,34 @@ def test_runtime_last_webhook_at_uses_receive_time_not_event_timestamp() -> None
 
     assert runtime.last_webhook_at is not None
     assert runtime.last_webhook_at >= before
+
+
+def test_runtime_webhook_notifies_listeners_even_without_sensor_change() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    calls = 0
+
+    def _listener() -> None:
+        nonlocal calls
+        calls += 1
+
+    runtime.async_subscribe(_listener)
+    normalized = {
+        "alarm_name": "unrecognized",
+        "detection_types": [],
+        "primary_detection_type": None,
+        "device_ids": [],
+        "source_values": [],
+        "timestamp_ms": None,
+        "timestamp_iso": None,
+        "query": {},
+        "raw_payload": {},
+        "event_types": [],
+    }
+
+    asyncio.run(runtime.async_process_webhook(normalized))
+
+    assert runtime.last_webhook_at is not None
+    assert calls == 1
 
 
 def test_runtime_sync_removes_duplicate_managed_automations() -> None:
@@ -150,15 +292,22 @@ def test_runtime_sync_removes_duplicate_managed_automations() -> None:
     assert runtime._managed_automations["person"]["id"] == "current"
 
 
-def _mock_entry(options: dict[str, int]) -> SimpleNamespace:
+def _mock_entry(
+    options: dict[str, int],
+    *,
+    data_updates: dict[str, object] | None = None,
+) -> SimpleNamespace:
+    data = {
+        CONF_HOST: "protect.local",
+        CONF_USERNAME: "admin",
+        CONF_PASSWORD: "secret",
+        CONF_VERIFY_SSL: False,
+        CONF_WEBHOOK_ID: "webhook-id",
+    }
+    if data_updates:
+        data.update(data_updates)
     return SimpleNamespace(
         entry_id="entry-1",
-        data={
-            CONF_HOST: "protect.local",
-            CONF_USERNAME: "admin",
-            CONF_PASSWORD: "secret",
-            CONF_VERIFY_SSL: False,
-            CONF_WEBHOOK_ID: "webhook-id",
-        },
+        data=data,
         options=options,
     )

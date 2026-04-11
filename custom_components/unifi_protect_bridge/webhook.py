@@ -27,6 +27,8 @@ async def async_handle_protect_webhook(hass: Any, webhook_id: str, request: Requ
     matched_cameras = []
     if runtime is not None:
         matched_cameras = await runtime.async_process_webhook(normalized)
+    else:
+        _LOGGER.warning("Received UniFi Protect Bridge webhook for unknown runtime")
 
     event_data = _build_event_data(normalized, request.method, matched_cameras)
 

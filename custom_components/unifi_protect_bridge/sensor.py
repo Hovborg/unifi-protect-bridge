@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .catalog import humanize_source
 from .const import STATUS_SENSOR_NAME
@@ -69,7 +71,7 @@ class HaProtectBridgeStatusSensor(SensorEntity):
         return self._runtime.bridge_device_info()
 
 
-class HaProtectBridgeTimestampSensor(SensorEntity):
+class HaProtectBridgeTimestampSensor(RestoreEntity, SensorEntity):
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -82,6 +84,8 @@ class HaProtectBridgeTimestampSensor(SensorEntity):
         self._attr_icon = spec.icon
 
     async def async_added_to_hass(self) -> None:
+        if await self._async_restore_previous_state():
+            self.async_write_ha_state()
         self.async_on_remove(self._runtime.async_subscribe(self.async_write_ha_state))
 
     @property
@@ -111,3 +115,32 @@ class HaProtectBridgeTimestampSensor(SensorEntity):
         if self._spec.camera_key:
             return self._runtime.camera_device_info(self._spec.camera_key)
         return self._runtime.bridge_device_info()
+
+    async def _async_restore_previous_state(self) -> bool:
+        if self._runtime.get_sensor_state(self._spec.key) is not None:
+            return False
+
+        last_state = await self.async_get_last_state()
+        if last_state is None or last_state.state in {None, "unknown", "unavailable"}:
+            return False
+
+        timestamp = _parse_restored_timestamp(last_state.state)
+        if timestamp is None:
+            return False
+
+        return self._runtime.restore_sensor_state(
+            self._spec.key,
+            timestamp,
+            dict(getattr(last_state, "attributes", None) or {}),
+        )
+
+
+def _parse_restored_timestamp(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
