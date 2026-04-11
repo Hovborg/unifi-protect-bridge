@@ -325,21 +325,32 @@ integrations. UniFi Protect Bridge ships those local assets in:
 custom_components/unifi_protect_bridge/brand/
 ```
 
-The domain must stay aligned with the manifest domain:
+Supported files are included for light and dark themes:
+
+- `icon.png`
+- `icon@2x.png`
+- `dark_icon.png`
+- `dark_icon@2x.png`
+- `logo.png`
+- `logo@2x.png`
+- `dark_logo.png`
+- `dark_logo@2x.png`
+
+No extra configuration is required. The folder name is tied to the integration
+domain, which must stay aligned with the manifest domain:
 
 ```text
 unifi_protect_bridge
 ```
 
-Remote HACS and Home Assistant views can also use the Home Assistant Brands CDN
-path:
+New custom integration brand PRs are no longer accepted in
+`home-assistant/brands`; local `brand/` assets are the supported path. If HACS
+or Home Assistant still shows a placeholder after installing a new release,
+restart Home Assistant and hard-refresh the browser so the local brand cache is
+rebuilt.
 
-```text
-https://brands.home-assistant.io/_/unifi_protect_bridge/icon.png
-```
-
-Home Assistant and HACS cache brand images. After a release or Brands update, it
-can take time before every UI location refreshes the icon.
+Home Assistant announcement:
+<https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api/>
 
 ## Troubleshooting
 
