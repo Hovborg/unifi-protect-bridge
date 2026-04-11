@@ -312,9 +312,15 @@ def _validate_webhook_base_url(value: Any) -> str:
         return ""
 
     parsed = urlsplit(text)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
         raise vol.Invalid("webhook_base_url")
-    return text.rstrip("/")
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 async def _async_validate_input(user_input: dict[str, Any]) -> dict[str, str | None]:

@@ -64,16 +64,32 @@ class _FakeRuntime:
             "host": "192.168.1.1",
             "verify_ssl": False,
             "event_backfill_limit": 0,
+            "last_backfill_event_count": 0,
+            "last_backfill_changed_event_count": 0,
+            "last_backfill_changed_sensor_count": 0,
+            "last_backfill_at": "2026-04-06T01:00:00+00:00",
+            "last_backfill_error": None,
             "webhook_configured": True,
+            "webhook_url_source": "home_assistant_instance_url",
             "webhook_base_url_override_configured": False,
             "nvr_id": "nvr-id",
             "nvr_name": "Dream Machine",
             "camera_count": 2,
             "managed_sources": ["motion", "ring", "audio_alarm_baby_cry"],
             "managed_automation_count": 3,
+            "automation_sync_error_count": 0,
+            "automation_sync_errors": {},
+            "sensor_count": 3,
+            "known_sensor_count": 1,
+            "unknown_sensor_count": 2,
+            "known_sensor_counts_by_source": {"motion": 1},
+            "unknown_sensor_counts_by_source": {"audio_alarm_baby_cry": 1, "ring": 1},
             "last_sync_at": "2026-04-06T01:00:00+00:00",
             "last_sync_error": None,
             "last_webhook_at": None,
+            "webhook_count": 0,
+            "unmatched_webhook_count": 0,
+            "pending_webhook_count": 0,
         }
 
     def iter_sensor_specs(self) -> list[BridgeSensorSpec]:
@@ -114,10 +130,16 @@ def test_config_entry_diagnostics_redacts_and_summarizes_runtime() -> None:
     assert "webhook_url" not in runtime["status"]
     assert "webhook_path" not in runtime["status"]
     assert runtime["status"]["webhook_configured"] is True
+    assert runtime["status"]["webhook_url_source"] == "home_assistant_instance_url"
     assert runtime["status"]["webhook_base_url_override_configured"] is False
     assert runtime["status"]["nvr_id"] == "REDACTED"
     assert runtime["status"]["nvr_name"] == "REDACTED"
     assert runtime["status"]["managed_sources"] == ["motion", "ring", "audio_alarm_baby_cry"]
+    assert runtime["status"]["automation_sync_error_count"] == 0
+    assert runtime["status"]["automation_sync_errors"] == {}
+    assert runtime["status"]["known_sensor_count"] == 1
+    assert runtime["status"]["unknown_sensor_count"] == 2
+    assert runtime["status"]["last_backfill_error"] is None
     assert runtime["catalog"]["camera_count"] == 2
     assert runtime["catalog"]["doorbell_count"] == 1
     assert runtime["catalog"]["models"] == {"G4 Doorbell Pro": 1, "G6 Instant": 1}

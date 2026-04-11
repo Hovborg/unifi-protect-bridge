@@ -101,6 +101,40 @@ def test_normalize_audio_baby_cry_alias() -> None:
     assert normalized["device_ids"] == ["84784828725C"]
 
 
+def test_normalize_face_name_hint_requires_token_match() -> None:
+    normalized = normalize_webhook_payload(
+        {
+            "alarm": {
+                "name": "Network interface changed state",
+                "conditions": [],
+                "triggers": [],
+            }
+        },
+        {},
+    )
+
+    assert normalized["detection_types"] == []
+    assert normalized["event_types"] == []
+
+
+def test_normalize_face_subtype_also_updates_generic_face() -> None:
+    normalized = normalize_webhook_payload(
+        {},
+        {
+            "alarm": "Front door known face",
+            "source": "known_face",
+            "device": "84784828725C",
+        },
+    )
+
+    assert normalized["primary_detection_type"] == "face_known"
+    assert normalized["detection_types"] == ["face_known", "face"]
+    assert normalized["event_types"] == [
+        "unifi_protect_bridge_face_known",
+        "unifi_protect_bridge_face",
+    ]
+
+
 def test_normalize_smart_detect_event_payload() -> None:
     normalized = normalize_event_payload(
         {
@@ -121,6 +155,7 @@ def test_normalize_smart_detect_event_payload() -> None:
     assert normalized["detection_types"] == [
         "person",
         "vehicle",
+        "face",
         "license_plate_of_interest",
         "audio_alarm_smoke",
         "audio_alarm_baby_cry",

@@ -35,7 +35,7 @@
     "error": {
       "cannot_connect": "Failed to connect to UniFi Protect.",
       "invalid_auth": "Invalid Protect username or password.",
-      "webhook_base_url": "Webhook base URL must be an absolute http:// or https:// URL.",
+      "webhook_base_url": "Webhook base URL must be only the Home Assistant origin, for example http://ha.local:8123, with no path, query, or webhook token.",
       "unknown": "Unexpected error while setting up the bridge."
     },
     "abort": {

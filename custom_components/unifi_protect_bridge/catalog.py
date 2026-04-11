@@ -11,7 +11,7 @@ _OBJECT_TYPE_TO_SOURCES = {
     "animal": ("animal",),
     "package": ("package",),
     "licenseplate": ("license_plate_of_interest",),
-    "face": ("face_unknown", "face_known", "face_of_interest"),
+    "face": ("face", "face_unknown", "face_known", "face_of_interest"),
 }
 
 _AUDIO_TYPE_TO_SOURCE = {

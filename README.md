@@ -204,8 +204,11 @@ supplies a timestamp for that camera/source pair. After a sensor has had a
 known value, the integration restores it across Home Assistant restarts.
 
 The bridge status sensor reports diagnostic counters such as `sensor_count`,
-`known_sensor_count`, `unknown_sensor_count`, `last_backfill_event_count`,
-`last_backfill_changed_event_count`, and `last_webhook_at`.
+`known_sensor_count`, `unknown_sensor_count`, source-level known/unknown counts,
+`last_backfill_event_count`, `last_backfill_error`, `webhook_count`,
+`unmatched_webhook_count`, `last_webhook_at`, `automation_sync_error_count`, and
+`automation_sync_errors`. The sensor counters only count detection timestamp
+sensors, not the bridge status sensor itself.
 
 The integration registers these services:
 
@@ -219,6 +222,16 @@ Entity IDs depend on your NVR and camera names, but they look like this:
 - `sensor.<camera>_last_ring`
 - `sensor.<camera>_last_vehicle`
 
+### Blueprint Example
+
+The repository includes an example automation blueprint at
+`blueprints/automation/unifi_protect_bridge/react_to_detection.yaml`.
+
+HACS installs this repository as an integration under `custom_components/`.
+Home Assistant does not automatically import top-level blueprint files from a
+HACS integration download, so import or copy the blueprint manually if you want
+to use it.
+
 Every incoming webhook fires `unifi_protect_bridge_webhook`. Recognized detections also fire:
 
 - `unifi_protect_bridge_detection`
@@ -229,6 +242,7 @@ Every incoming webhook fires `unifi_protect_bridge_webhook`. Recognized detectio
 - `unifi_protect_bridge_package`
 - `unifi_protect_bridge_license_plate_of_interest`
 - `unifi_protect_bridge_ring`
+- `unifi_protect_bridge_face`
 - `unifi_protect_bridge_face_unknown`
 - `unifi_protect_bridge_face_known`
 - `unifi_protect_bridge_face_of_interest`
@@ -251,7 +265,7 @@ the local Protect API and normalized by this integration.
 | --- | --- |
 | Core | `motion`, `person`, `vehicle`, `animal`, `package` |
 | Doorbell | `ring` |
-| Face | `face_unknown`, `face_known`, `face_of_interest` |
+| Face | `face`, `face_unknown`, `face_known`, `face_of_interest` |
 | License plate | `license_plate_of_interest` |
 | Audio alarms | `audio_alarm_baby_cry`, `audio_alarm_bark`, `audio_alarm_burglar`, `audio_alarm_car_horn`, `audio_alarm_co`, `audio_alarm_glass_break`, `audio_alarm_siren`, `audio_alarm_smoke`, `audio_alarm_speak` |
 
@@ -266,9 +280,10 @@ the internal/local URL when Home Assistant has one. Open **Settings** ->
 Assistant URL.
 
 On a LAN install, this is often the local Home Assistant URL, for example
-`http://192.168.1.190:8123`. If timestamp sensors stay `unknown` and the
-Bridge Status sensor has no `last_webhook_at`, Protect has not delivered a live
-webhook to Home Assistant yet.
+`http://192.168.1.190:8123`. Enter only the base URL, with no
+`/api/webhook/...` path, query string, or webhook token. If timestamp sensors
+stay `unknown` and the Bridge Status sensor has no `last_webhook_at`, Protect
+has not delivered a live webhook to Home Assistant yet.
 
 ### Home Assistant startup feels heavy
 

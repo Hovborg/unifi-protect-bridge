@@ -115,6 +115,7 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
 
     try:
         runtime = HaProtectBridgeRuntime(hass, entry)
+        entry.runtime_data = runtime
         webhook_id = entry.data[CONF_WEBHOOK_ID]
         webhook.async_register(
             hass,
@@ -152,7 +153,6 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
         )
         raise ConfigEntryNotReady(str(err)) from err
 
-    entry.runtime_data = runtime
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:

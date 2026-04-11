@@ -65,11 +65,22 @@ class HaProtectBridgeRuntime:
         self._timestamps: dict[str, datetime] = {}
         self._event_summaries: dict[str, dict[str, Any]] = {}
         self._managed_automations: dict[str, dict[str, Any]] = {}
+        self._automation_sync_errors: dict[str, str] = {}
         self._webhook_url: str | None = None
         self._webhook_url_source: str | None = None
         self._webhook_path = webhook.async_generate_path(entry.data[CONF_WEBHOOK_ID])
         self._last_backfill_event_count = 0
         self._last_backfill_applied_count = 0
+        self._last_backfill_changed_sensor_count = 0
+        self._last_backfill_at: datetime | None = None
+        self._last_backfill_error: str | None = None
+        self._webhook_count = 0
+        self._unmatched_webhook_count = 0
+        self._last_unmatched_webhook_at: datetime | None = None
+        self._last_webhook_detection_types: list[str] = []
+        self._last_webhook_matched_camera_count = 0
+        self._last_webhook_changed_sensor_count = 0
+        self._pending_webhook_events: list[tuple[dict[str, Any], datetime]] = []
         self.last_sync_at: datetime | None = None
         self.last_sync_error: str | None = None
         self.last_webhook_at: datetime | None = None
@@ -122,7 +133,22 @@ class HaProtectBridgeRuntime:
     async def async_process_webhook(self, normalized: dict[str, Any]) -> list[dict[str, Any]]:
         timestamp = _timestamp_from_normalized(normalized)
         self.last_webhook_at = datetime.now(UTC)
-        _changed, matched_cameras = self._apply_normalized_event(normalized, timestamp)
+        self._webhook_count += 1
+        self._last_webhook_detection_types = list(normalized.get("detection_types") or [])
+        if not self._sensor_specs:
+            self._pending_webhook_events.append((dict(normalized), timestamp))
+            self._pending_webhook_events = self._pending_webhook_events[-50:]
+            self._last_webhook_matched_camera_count = 0
+            self._last_webhook_changed_sensor_count = 0
+            self._notify_listeners()
+            return []
+
+        changed_sensor_count, matched_cameras = self._apply_normalized_event(normalized, timestamp)
+        self._last_webhook_matched_camera_count = len(matched_cameras)
+        self._last_webhook_changed_sensor_count = changed_sensor_count
+        if normalized.get("device_ids") and not matched_cameras:
+            self._unmatched_webhook_count += 1
+            self._last_unmatched_webhook_at = self.last_webhook_at
         self._notify_listeners()
 
         return matched_cameras
@@ -183,6 +209,9 @@ class HaProtectBridgeRuntime:
             "last_backfill_event_count": self._last_backfill_event_count,
             "last_backfill_changed_event_count": self._last_backfill_applied_count,
             "last_backfill_applied_count": self._last_backfill_applied_count,
+            "last_backfill_changed_sensor_count": self._last_backfill_changed_sensor_count,
+            "last_backfill_at": _isoformat(self._last_backfill_at),
+            "last_backfill_error": self._last_backfill_error,
             "webhook_configured": self.webhook_url is not None,
             "webhook_url_source": webhook_url_source,
             "webhook_base_url_override_configured": bool(
@@ -193,12 +222,23 @@ class HaProtectBridgeRuntime:
             "camera_count": len(self.catalog.get("cameras") or []),
             "managed_sources": self.managed_sources,
             "managed_automation_count": self.managed_automation_count,
+            "automation_sync_error_count": len(self._automation_sync_errors),
+            "automation_sync_errors": dict(sorted(self._automation_sync_errors.items())),
             "sensor_count": len(active_sensor_keys),
             "known_sensor_count": known_sensor_count,
             "unknown_sensor_count": len(active_sensor_keys) - known_sensor_count,
+            "known_sensor_counts_by_source": self._sensor_counts_by_source(known=True),
+            "unknown_sensor_counts_by_source": self._sensor_counts_by_source(known=False),
             "last_sync_at": _isoformat(self.last_sync_at),
             "last_sync_error": self.last_sync_error,
             "last_webhook_at": _isoformat(self.last_webhook_at),
+            "webhook_count": self._webhook_count,
+            "last_webhook_detection_types": list(self._last_webhook_detection_types),
+            "last_webhook_matched_camera_count": self._last_webhook_matched_camera_count,
+            "last_webhook_changed_sensor_count": self._last_webhook_changed_sensor_count,
+            "unmatched_webhook_count": self._unmatched_webhook_count,
+            "last_unmatched_webhook_at": _isoformat(self._last_unmatched_webhook_at),
+            "pending_webhook_count": len(self._pending_webhook_events),
         }
 
     def restore_sensor_state(
@@ -275,6 +315,7 @@ class HaProtectBridgeRuntime:
         desired_by_source = self._desired_automations()
         existing_by_source = group_managed_automations(automations)
         managed: dict[str, dict[str, Any]] = {}
+        automation_sync_errors: dict[str, str] = {}
 
         for source, desired in desired_by_source.items():
             existing_candidates = existing_by_source.pop(source, [])
@@ -294,7 +335,16 @@ class HaProtectBridgeRuntime:
             else:
                 _LOGGER.info("Creating managed Protect automation for %s", source)
 
-            created = await self._api.async_create_automation(desired)
+            try:
+                created = await self._api.async_create_automation(desired)
+            except ProtectApiError as err:
+                automation_sync_errors[source] = str(err)
+                _LOGGER.warning(
+                    "Could not create managed Protect automation for %s: %s",
+                    source,
+                    err,
+                )
+                continue
             managed[source] = created or desired
 
         for source, stale_items in existing_by_source.items():
@@ -302,6 +352,7 @@ class HaProtectBridgeRuntime:
                 _LOGGER.info("Removed stale managed Protect automation for %s", source)
 
         self._managed_automations = managed
+        self._automation_sync_errors = automation_sync_errors
 
     async def _async_delete_duplicate_automations(
         self,
@@ -374,10 +425,22 @@ class HaProtectBridgeRuntime:
 
         self._sensor_specs = sensor_specs
 
+    def _sensor_counts_by_source(self, *, known: bool) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for key, spec in self._sensor_specs.items():
+            is_known = key in self._timestamps
+            if is_known != known:
+                continue
+            counts[spec.source] = counts.get(spec.source, 0) + 1
+        return dict(sorted(counts.items()))
+
     async def _async_backfill_recent_events(self) -> None:
         limit = self._event_backfill_limit()
+        self._last_backfill_at = datetime.now(UTC)
         self._last_backfill_event_count = 0
         self._last_backfill_applied_count = 0
+        self._last_backfill_changed_sensor_count = 0
+        self._last_backfill_error = None
         if limit <= 0:
             _LOGGER.debug("Skipping Protect event backfill because limit is %s", limit)
             return
@@ -395,6 +458,7 @@ class HaProtectBridgeRuntime:
                     sorting="desc",
                 )
             except ProtectApiError as err:
+                self._last_backfill_error = str(err)
                 _LOGGER.warning("Could not backfill Protect events: %s", err)
                 return
 
@@ -413,9 +477,13 @@ class HaProtectBridgeRuntime:
                 if not normalized.get("detection_types"):
                     continue
                 timestamp = _timestamp_from_normalized(normalized)
-                changed, _matched_cameras = self._apply_normalized_event(normalized, timestamp)
-                if changed:
+                changed_sensor_count, _matched_cameras = self._apply_normalized_event(
+                    normalized,
+                    timestamp,
+                )
+                if changed_sensor_count:
                     self._last_backfill_applied_count += 1
+                    self._last_backfill_changed_sensor_count += changed_sensor_count
 
             if len(events) < page_limit:
                 return
@@ -460,26 +528,52 @@ class HaProtectBridgeRuntime:
                 timestamp = _timestamp_from_normalized(normalized)
                 self._apply_normalized_event(normalized, timestamp)
 
+        self._apply_pending_webhook_events()
+
+    def _apply_pending_webhook_events(self) -> None:
+        if not self._pending_webhook_events:
+            return
+
+        pending = self._pending_webhook_events
+        self._pending_webhook_events = []
+        for normalized, timestamp in pending:
+            changed_sensor_count, matched_cameras = self._apply_normalized_event(
+                normalized,
+                timestamp,
+            )
+            self._last_webhook_detection_types = list(
+                normalized.get("detection_types") or []
+            )
+            self._last_webhook_matched_camera_count = len(matched_cameras)
+            self._last_webhook_changed_sensor_count = changed_sensor_count
+            if normalized.get("device_ids") and not matched_cameras:
+                self._unmatched_webhook_count += 1
+                self._last_unmatched_webhook_at = datetime.now(UTC)
+
+        self._notify_listeners()
+
     def _apply_normalized_event(
         self,
         normalized: dict[str, Any],
         timestamp: datetime,
-    ) -> tuple[bool, list[dict[str, Any]]]:
+    ) -> tuple[int, list[dict[str, Any]]]:
         matched_cameras = resolve_cameras(self.catalog, normalized.get("device_ids") or [])
-        changed = False
+        changed_sensor_count = 0
 
         for source in normalized.get("detection_types") or []:
             global_key = f"global:{source}"
             if global_key in self._sensor_specs:
-                changed |= self._update_sensor_state(global_key, timestamp, normalized)
+                if self._update_sensor_state(global_key, timestamp, normalized):
+                    changed_sensor_count += 1
 
             for camera in matched_cameras:
                 sensor_key = f"{camera['camera_key']}:{source}"
                 if sensor_key not in self._sensor_specs:
                     continue
-                changed |= self._update_sensor_state(sensor_key, timestamp, normalized)
+                if self._update_sensor_state(sensor_key, timestamp, normalized):
+                    changed_sensor_count += 1
 
-        return changed, matched_cameras
+        return changed_sensor_count, matched_cameras
 
     def _update_sensor_state(
         self,

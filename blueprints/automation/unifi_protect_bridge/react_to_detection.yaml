@@ -16,6 +16,7 @@ blueprint:
             - unifi_protect_bridge_package
             - unifi_protect_bridge_license_plate_of_interest
             - unifi_protect_bridge_ring
+            - unifi_protect_bridge_face
             - unifi_protect_bridge_face_unknown
             - unifi_protect_bridge_face_known
             - unifi_protect_bridge_face_of_interest

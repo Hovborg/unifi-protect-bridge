@@ -50,7 +50,8 @@ def build_setup_message(
                 "If timestamp sensors stay unknown and the Bridge Status sensor shows no "
                 "`last_webhook_at`, open the integration Reconfigure flow and set "
                 "`Webhook base URL override` to a Home Assistant URL that UniFi Protect "
-                "can reach, such as your local LAN URL."
+                "can reach, such as your local LAN URL. Enter only the base URL, not "
+                "an `/api/webhook/...` path."
             ),
             "",
             "Operational note:",

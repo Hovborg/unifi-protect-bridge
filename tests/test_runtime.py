@@ -17,6 +17,7 @@ from custom_components.unifi_protect_bridge.const import (
     DEFAULT_EVENT_BACKFILL_LIMIT,
     MAX_EVENT_BACKFILL_LIMIT,
 )
+from custom_components.unifi_protect_bridge.protect_api import ProtectApiError
 from custom_components.unifi_protect_bridge.runtime import BridgeSensorSpec, HaProtectBridgeRuntime
 
 
@@ -90,8 +91,28 @@ def test_runtime_backfill_tracks_event_and_applied_counts() -> None:
     assert attributes["last_backfill_event_count"] == 2
     assert attributes["last_backfill_changed_event_count"] == 1
     assert attributes["last_backfill_applied_count"] == 1
+    assert attributes["last_backfill_changed_sensor_count"] == 1
+    assert attributes["last_backfill_at"] is not None
+    assert attributes["last_backfill_error"] is None
     assert attributes["known_sensor_count"] == 1
     assert attributes["unknown_sensor_count"] == 0
+
+
+def test_runtime_backfill_reports_non_fatal_errors() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+
+    async def _async_get_events(**kwargs):
+        del kwargs
+        raise ProtectApiError("limit rejected")
+
+    runtime._api.async_get_events = _async_get_events
+
+    asyncio.run(runtime._async_backfill_recent_events())
+
+    attributes = runtime.get_status_attributes()
+    assert attributes["last_backfill_event_count"] == 0
+    assert attributes["last_backfill_error"] == "limit rejected"
+    assert attributes["last_sync_error"] is None
 
 
 def test_runtime_backfill_paginates_protect_events() -> None:
@@ -225,6 +246,94 @@ def test_runtime_webhook_notifies_listeners_even_without_sensor_change() -> None
 
     assert runtime.last_webhook_at is not None
     assert calls == 1
+    attributes = runtime.get_status_attributes()
+    assert attributes["webhook_count"] == 1
+    assert attributes["last_webhook_detection_types"] == []
+
+
+def test_runtime_webhook_tracks_unmatched_camera_ids() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    runtime.catalog = {"lookup": {}, "cameras": [], "managed_sources": ["person"]}
+    runtime._sensor_specs = {
+        "global:person": BridgeSensorSpec(
+            key="global:person",
+            unique_id="entry-1_global_person",
+            name="Last person",
+            icon=None,
+            source="person",
+        )
+    }
+    normalized = {
+        "alarm_name": "person",
+        "detection_types": ["person"],
+        "primary_detection_type": "person",
+        "device_ids": ["unknown-camera"],
+        "source_values": ["person"],
+        "timestamp_ms": 1770000000000,
+        "timestamp_iso": "2026-02-28T08:00:00+00:00",
+        "query": {},
+        "raw_payload": {},
+        "event_types": ["unifi_protect_bridge_person"],
+    }
+
+    asyncio.run(runtime.async_process_webhook(normalized))
+
+    attributes = runtime.get_status_attributes()
+    assert attributes["webhook_count"] == 1
+    assert attributes["unmatched_webhook_count"] == 1
+    assert attributes["last_unmatched_webhook_at"] is not None
+    assert attributes["last_webhook_matched_camera_count"] == 0
+    assert attributes["last_webhook_changed_sensor_count"] == 1
+
+
+def test_runtime_buffers_webhooks_until_sensor_specs_exist() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    calls = 0
+
+    def _listener() -> None:
+        nonlocal calls
+        calls += 1
+
+    runtime.async_subscribe(_listener)
+    normalized = {
+        "alarm_name": "person",
+        "detection_types": ["person"],
+        "primary_detection_type": "person",
+        "device_ids": ["cam-1"],
+        "source_values": ["person"],
+        "timestamp_ms": 1770000000000,
+        "timestamp_iso": "2026-02-28T08:00:00+00:00",
+        "query": {},
+        "raw_payload": {},
+        "event_types": ["unifi_protect_bridge_person"],
+    }
+
+    matched = asyncio.run(runtime.async_process_webhook(normalized))
+
+    assert matched == []
+    assert runtime.get_status_attributes()["pending_webhook_count"] == 1
+    assert calls == 1
+
+    runtime.catalog = {
+        "lookup": {"CAM1": "cam-1"},
+        "managed_sources": ["person"],
+        "cameras": [
+            {
+                "camera_key": "cam-1",
+                "camera_id": "cam-1",
+                "device_mac": "CAM1",
+                "name": "Camera",
+                "supported_sources": ["person"],
+            }
+        ],
+    }
+    runtime._rebuild_sensor_specs()
+    runtime._apply_pending_webhook_events()
+
+    attributes = runtime.get_status_attributes()
+    assert attributes["pending_webhook_count"] == 0
+    assert attributes["known_sensor_count"] == 2
+    assert calls == 2
 
 
 def test_runtime_sync_removes_duplicate_managed_automations() -> None:
@@ -290,6 +399,42 @@ def test_runtime_sync_removes_duplicate_managed_automations() -> None:
     assert deleted == ["legacy"]
     assert created == []
     assert runtime._managed_automations["person"]["id"] == "current"
+
+
+def test_runtime_sync_continues_when_one_automation_source_is_rejected() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    runtime.catalog = {
+        "nvr_id": "nvr",
+        "nvr_name": "Protect",
+        "lookup": {},
+        "managed_sources": ["person", "face"],
+        "cameras": [
+            {
+                "device_mac": "84784828725C",
+                "supported_sources": ["person", "face"],
+            }
+        ],
+    }
+    runtime._webhook_url = "http://ha.local/api/webhook/test"
+    created_sources: list[str] = []
+
+    async def _async_create_automation(payload: dict[str, object]) -> dict[str, object]:
+        source = payload["conditions"][0]["condition"]["source"]
+        created_sources.append(source)
+        if source == "face":
+            raise ProtectApiError("unsupported source")
+        return {"id": f"created-{source}", **payload}
+
+    runtime._api.async_create_automation = _async_create_automation
+
+    asyncio.run(runtime._async_sync_managed_automations([]))
+
+    assert created_sources == ["person", "face"]
+    assert sorted(runtime._managed_automations) == ["person"]
+    attributes = runtime.get_status_attributes()
+    assert attributes["managed_automation_count"] == 1
+    assert attributes["automation_sync_error_count"] == 1
+    assert attributes["automation_sync_errors"] == {"face": "unsupported source"}
 
 
 def _mock_entry(

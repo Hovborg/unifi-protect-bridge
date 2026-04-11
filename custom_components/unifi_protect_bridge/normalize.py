@@ -22,6 +22,7 @@ _ALIASES = {
     "knownface": "face_known",
     "unknownface": "face_unknown",
     "faceofinterest": "face_of_interest",
+    "face": "face",
     "doorbellring": "ring",
     "doorbell": "ring",
     "known_face": "face_known",
@@ -46,6 +47,7 @@ _NAME_HINTS = (
     ("face of interest", "face_of_interest"),
     ("known face", "face_known"),
     ("unknown face", "face_unknown"),
+    ("face", "face"),
     ("license plate", "license_plate_of_interest"),
     ("baby cry", "audio_alarm_baby_cry"),
     ("crying baby", "audio_alarm_baby_cry"),
@@ -63,6 +65,12 @@ _NAME_HINTS = (
     ("bark", "audio_alarm_bark"),
 )
 
+_FACE_SUBTYPE_DETECTIONS = {
+    "face_unknown",
+    "face_known",
+    "face_of_interest",
+}
+
 _EVENT_TYPE_TO_DETECTIONS = {
     "motion": ("motion",),
     "ring": ("ring",),
@@ -74,6 +82,7 @@ _SMART_EVENT_TYPE_TO_DETECTIONS = {
     "animal": ("animal",),
     "package": ("package",),
     "licenseplate": ("license_plate_of_interest",),
+    "face": ("face",),
     "alrmbabycry": ("audio_alarm_baby_cry",),
     "alrmbark": ("audio_alarm_bark",),
     "alrmburglar": ("audio_alarm_burglar",),
@@ -213,16 +222,16 @@ def _extract_event_detection_types(
         for raw in smart_detect_types:
             detections.extend(_SMART_EVENT_TYPE_TO_DETECTIONS.get(_slugify(raw), ()))
 
-    return _unique(detections)
+    return _expand_detection_types(detections)
 
 
 def _extract_detection_types(alarm_name: str | None, source_values: list[str]) -> list[str]:
     detections: list[str] = []
 
     if alarm_name:
-        lowered_name = alarm_name.lower()
+        name_tokens = _tokenize_words(alarm_name)
         for phrase, normalized in _NAME_HINTS:
-            if phrase in lowered_name:
+            if _contains_token_phrase(name_tokens, phrase):
                 detections.append(normalized)
 
     for raw in source_values:
@@ -230,7 +239,28 @@ def _extract_detection_types(alarm_name: str | None, source_values: list[str]) -
         if normalized:
             detections.append(normalized)
 
-    return _unique(detections)
+    return _expand_detection_types(detections)
+
+
+def _expand_detection_types(detections: list[str]) -> list[str]:
+    expanded: list[str] = []
+    for detection in detections:
+        expanded.append(detection)
+        if detection in _FACE_SUBTYPE_DETECTIONS:
+            expanded.append("face")
+    return _unique(expanded)
+
+
+def _contains_token_phrase(name_tokens: tuple[str, ...], phrase: str) -> bool:
+    phrase_tokens = _tokenize_words(phrase)
+    if not phrase_tokens or len(phrase_tokens) > len(name_tokens):
+        return False
+
+    phrase_length = len(phrase_tokens)
+    return any(
+        name_tokens[index : index + phrase_length] == phrase_tokens
+        for index in range(len(name_tokens) - phrase_length + 1)
+    )
 
 
 def _normalize_detection(value: str) -> str | None:
@@ -269,6 +299,20 @@ def _slugify(value: str) -> str:
     result = value.strip().lower()
     result = result.replace("-", "_").replace(" ", "_")
     return "".join(character for character in result if character.isalnum() or character == "_")
+
+
+def _tokenize_words(value: str) -> tuple[str, ...]:
+    tokens: list[str] = []
+    current: list[str] = []
+    for character in value.lower():
+        if character.isalnum():
+            current.append(character)
+        elif current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return tuple(tokens)
 
 
 def _unique(values: list[str]) -> list[str]:

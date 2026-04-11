@@ -14,7 +14,7 @@ Purpose:
 - Home Assistant config flow
 - Home Assistant runtime
 - Protect webhook provisioning from inside Home Assistant
-- sensors, events, diagnostics, services, and blueprints
+- sensors, events, diagnostics, services, and optional blueprint examples
 
 Install path:
 
@@ -30,6 +30,10 @@ Install method:
 
 The CLI is not required for HACS installs. Home Assistant runs this integration
 directly and manages UniFi Protect from the config entry.
+
+HACS installs integration repositories under `custom_components/`. Any
+top-level blueprint files in this repository are examples and must be imported
+or copied separately if an installer wants to use them.
 
 ## CLI
 

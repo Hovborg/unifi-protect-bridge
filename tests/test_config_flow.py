@@ -175,6 +175,12 @@ def test_webhook_base_url_validator_requires_absolute_http_url() -> None:
     with pytest.raises(config_flow.vol.Invalid):
         config_flow._validate_webhook_base_url("ha.local:8123")
 
+    with pytest.raises(config_flow.vol.Invalid):
+        config_flow._validate_webhook_base_url("http://ha.local:8123/api/webhook/token")
+
+    with pytest.raises(config_flow.vol.Invalid):
+        config_flow._validate_webhook_base_url("http://ha.local:8123?token=secret")
+
 
 def _mock_entry() -> Any:
     return SimpleNamespace(
