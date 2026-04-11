@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from homeassistant.components import webhook
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import network
 
 from custom_components.unifi_protect_bridge.const import (
@@ -232,6 +233,54 @@ def test_runtime_status_attributes_report_webhook_override_source() -> None:
 
     assert attributes["webhook_url_source"] == "override"
     assert attributes["webhook_base_url_override_configured"] is True
+
+
+def test_runtime_removes_stale_sensor_registry_entries() -> None:
+    hass = SimpleNamespace(entity_registry=er.EntityRegistry())
+    runtime = HaProtectBridgeRuntime(hass, _mock_entry({}))
+    runtime._sensor_specs = {
+        "global:person": BridgeSensorSpec(
+            key="global:person",
+            unique_id="entry-1_global_person",
+            name="Last person",
+            icon=None,
+            source="person",
+        )
+    }
+    hass.entity_registry.entities = [
+        SimpleNamespace(
+            entity_id="sensor.bridge_status",
+            unique_id="entry-1_status",
+            domain="sensor",
+            platform="unifi_protect_bridge",
+            config_entry_id="entry-1",
+        ),
+        SimpleNamespace(
+            entity_id="sensor.keep_person",
+            unique_id="entry-1_global_person",
+            domain="sensor",
+            platform="unifi_protect_bridge",
+            config_entry_id="entry-1",
+        ),
+        SimpleNamespace(
+            entity_id="sensor.stale_motion",
+            unique_id="entry-1_global_motion",
+            domain="sensor",
+            platform="unifi_protect_bridge",
+            config_entry_id="entry-1",
+        ),
+        SimpleNamespace(
+            entity_id="sensor.other_platform",
+            unique_id="entry-1_global_motion",
+            domain="sensor",
+            platform="other",
+            config_entry_id="entry-1",
+        ),
+    ]
+
+    runtime._remove_stale_sensor_registry_entries()
+
+    assert hass.entity_registry.removed == ["sensor.stale_motion"]
 
 
 def test_runtime_last_webhook_at_uses_receive_time_not_event_timestamp() -> None:

@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.components import webhook
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .automation_payloads import (
@@ -117,6 +118,7 @@ class HaProtectBridgeRuntime:
             automations = await self._api.async_get_automations()
             await self._async_sync_managed_automations(automations)
             self._rebuild_sensor_specs()
+            self._remove_stale_sensor_registry_entries()
             self._seed_timestamps_from_catalog()
             await self._async_backfill_recent_events()
             self.last_sync_at = datetime.now(UTC)
@@ -465,6 +467,24 @@ class HaProtectBridgeRuntime:
                 self._event_summaries.pop(stale_key, None)
 
         self._sensor_specs = sensor_specs
+
+    @callback
+    def _remove_stale_sensor_registry_entries(self) -> None:
+        registry = er.async_get(self.hass)
+        active_unique_ids = {
+            f"{self.entry.entry_id}_status",
+            *(spec.unique_id for spec in self._sensor_specs.values()),
+        }
+
+        for entity_entry in er.async_entries_for_config_entry(
+            registry,
+            self.entry.entry_id,
+        ):
+            if entity_entry.domain != "sensor" or entity_entry.platform != DOMAIN:
+                continue
+            if entity_entry.unique_id in active_unique_ids:
+                continue
+            registry.async_remove(entity_entry.entity_id)
 
     def _sensor_counts_by_source(self, *, known: bool) -> dict[str, int]:
         counts: dict[str, int] = {}
