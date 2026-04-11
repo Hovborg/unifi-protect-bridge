@@ -253,6 +253,7 @@ Then restart Home Assistant and add the integration from **Settings -> Devices &
 - My Home Assistant HACS links: <https://www.hacs.xyz/docs/use/my/>
 - Latest GitHub release: <https://github.com/Hovborg/unifi-protect-bridge/releases/latest>
 - Issue tracker: <https://github.com/Hovborg/unifi-protect-bridge/issues>
+- Optional CLI repository: <https://github.com/Hovborg/unifi-protect-bridge-cli>
 
 ## Technical Note
 
@@ -263,75 +264,16 @@ Then restart Home Assistant and add the integration from **Settings -> Devices &
 
 ## Optional CLI
 
-The CLI is a developer and support tool for local checks, diagnostics, and dry
-runs. HACS users do not need it to run the Home Assistant integration.
+The CLI has moved to its own repository:
 
-This repository intentionally ships both the HACS integration and the CLI for
-now. The CLI reuses the same Protect payload builders, ownership rules, and
-Home Assistant service names as the integration, so one release keeps both
-parts aligned. If the CLI becomes a standalone product with its own lifecycle,
-it can be split into a separate repo later.
+<https://github.com/Hovborg/unifi-protect-bridge-cli>
 
-From a repository checkout:
+You do not need the CLI for a HACS install. Home Assistant runs this integration
+directly, logs in to UniFi Protect from the config entry, and provisions the
+bridge-owned Protect webhook automations itself.
 
-```bash
-source .venv/bin/activate
-unifi-protect-bridge doctor
-unifi-protect-bridge repo check
-unifi-protect-bridge integration check
-unifi-protect-bridge integration manifest
-unifi-protect-bridge bridge sources
-```
-
-For offline Protect webhook and automation checks, save JSON first and pass it to
-the CLI:
-
-```bash
-unifi-protect-bridge protect cameras --bootstrap protect-bootstrap.json
-unifi-protect-bridge protect automations --file protect-automations.json
-unifi-protect-bridge webhook normalize --file protect-webhook.json --query "source=person"
-unifi-protect-bridge automation inspect --file protect-automations.json
-unifi-protect-bridge automation render person --device "84:78:48:28:72:5C" --webhook-url "https://ha.example/api/webhook/redacted"
-unifi-protect-bridge bridge plan --bootstrap protect-bootstrap.json --webhook-url "https://ha.example/api/webhook/redacted"
-unifi-protect-bridge bridge plan person --device "84:78:48:28:72:5C" --webhook-url "https://ha.example/api/webhook/redacted"
-unifi-protect-bridge bridge diff --bootstrap protect-bootstrap.json --automations protect-automations.json --webhook-url "https://ha.example/api/webhook/redacted"
-```
-
-For live Protect read-only checks, set `UNIFI_PROTECT_BASE_URL`,
-`UNIFI_PROTECT_USERNAME`, and `UNIFI_PROTECT_PASSWORD`, then run:
-
-```bash
-unifi-protect-bridge protect login-check --connect
-unifi-protect-bridge protect cameras --connect
-unifi-protect-bridge protect automations --connect
-unifi-protect-bridge bridge diff --connect --webhook-url "https://ha.example/api/webhook/redacted"
-```
-
-The read-only CLI commands do not change Protect automations. To make Home
-Assistant sensors and alarms receive live Protect events, the bridge needs
-bridge-owned Protect webhook automations. Direct Protect apply creates,
-replaces, or deletes only those managed automations, and is available only as an
-explicit private-API operation:
-
-```bash
-unifi-protect-bridge bridge apply --connect --webhook-url "https://ha.example/api/webhook/redacted" --yes
-```
-
-That command always builds a diff first, requires `--yes`, refuses non-webhook
-URLs unless explicitly allowed, and only touches bridge-owned automations named
-with `UniFi Protect Bridge:` or the legacy `HA Protect Bridge:` prefix.
-
-For live Home Assistant checks, set `HA_BASE_URL` and `HA_TOKEN`, then run:
-
-```bash
-unifi-protect-bridge ha setup-url
-unifi-protect-bridge ha ping
-unifi-protect-bridge ha resync --yes
-```
-
-`ha resync --yes` calls Home Assistant's own `unifi_protect_bridge.resync`
-service, so Protect changes still go through the integration runtime and its
-bridge-owned automation safeguards.
+Use the separate CLI only for terminal-based diagnostics, Protect login checks,
+diff/apply support, and calling the integration resync service manually.
 
 ## Development
 
