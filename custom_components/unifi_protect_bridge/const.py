@@ -34,6 +34,7 @@ SERVICE_SHOW_SETUP_INFO = "show_setup_info"
 SERVICE_RESYNC = "resync"
 NOTIFICATION_ID = f"{DOMAIN}_setup"
 STATUS_SENSOR_NAME = "Bridge Status"
+RECOGNIZED_FACE_SOURCE = "recognized_face"
 # Keep recognizing the old managed automation prefix after the public rename.
 LEGACY_MANAGED_AUTOMATION_PREFIX = "HA Protect Bridge:"
 MANAGED_AUTOMATION_PREFIX = "UniFi Protect Bridge:"
@@ -89,6 +90,7 @@ SOURCE_LABELS = {
     "face_unknown": "unknown face",
     "face_known": "known face",
     "face_of_interest": "face of interest",
+    RECOGNIZED_FACE_SOURCE: "recognized face",
     "audio_alarm_baby_cry": "baby cry alarm",
     "audio_alarm_bark": "bark alarm",
     "audio_alarm_burglar": "burglar alarm",
@@ -112,6 +114,7 @@ SOURCE_ICONS = {
     "face_unknown": "mdi:face-recognition",
     "face_known": "mdi:face-recognition",
     "face_of_interest": "mdi:face-man-profile",
+    RECOGNIZED_FACE_SOURCE: "mdi:face-recognition",
     "audio_alarm_baby_cry": "mdi:baby-face-outline",
     "audio_alarm_bark": "mdi:dog-side",
     "audio_alarm_burglar": "mdi:shield-alert",

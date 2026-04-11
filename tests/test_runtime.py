@@ -371,6 +371,125 @@ def test_runtime_webhook_tracks_unmatched_camera_ids() -> None:
     assert attributes["last_webhook_changed_sensor_count"] == 1
 
 
+def test_runtime_sensor_attributes_include_recognized_face_name() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    runtime.catalog = {
+        "lookup": {"CAM1": "cam-1"},
+        "managed_sources": ["face", "face_known"],
+        "cameras": [
+            {
+                "camera_key": "cam-1",
+                "camera_id": "cam-1",
+                "device_mac": "CAM1",
+                "name": "Front Door",
+                "supported_sources": ["face", "face_known"],
+            }
+        ],
+    }
+    runtime._rebuild_sensor_specs()
+    normalized = {
+        "alarm_name": "Known face",
+        "detection_types": ["face_known", "face"],
+        "primary_detection_type": "face_known",
+        "device_ids": ["CAM1"],
+        "source_values": ["face_known"],
+        "trigger_values": ["Alice"],
+        "recognized_face_names": ["Alice"],
+        "primary_recognized_face": "Alice",
+        "timestamp_ms": 1772265600000,
+        "timestamp_iso": "2026-02-28T08:00:00+00:00",
+        "query": {},
+        "raw_payload": {},
+        "event_types": ["unifi_protect_bridge_face_known", "unifi_protect_bridge_face"],
+    }
+
+    asyncio.run(runtime.async_process_webhook(normalized))
+
+    assert runtime.has_sensor_spec("recognized_face:global:alice")
+    assert runtime.has_sensor_spec("recognized_face:cam-1:alice")
+    assert runtime.get_sensor_state("recognized_face:global:alice") == datetime(
+        2026,
+        2,
+        28,
+        8,
+        0,
+        tzinfo=UTC,
+    )
+    attributes = runtime.get_sensor_attributes("cam-1:face_known")
+    assert attributes["last_trigger_values"] == ["Alice"]
+    assert attributes["last_recognized_face_names"] == ["Alice"]
+    assert attributes["last_recognized_face"] == "Alice"
+    person_attributes = runtime.get_sensor_attributes("recognized_face:cam-1:alice")
+    assert person_attributes["recognized_face_name"] == "Alice"
+    assert person_attributes["last_recognized_face"] == "Alice"
+
+
+def test_runtime_ignores_unknown_recognized_face_sensor_name() -> None:
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
+    runtime.catalog = {"lookup": {}, "cameras": [], "managed_sources": ["face_unknown"]}
+    runtime._rebuild_sensor_specs()
+    normalized = {
+        "alarm_name": "Unknown face",
+        "detection_types": ["face_unknown", "face"],
+        "primary_detection_type": "face_unknown",
+        "device_ids": [],
+        "source_values": ["face_unknown"],
+        "trigger_values": ["Unknown"],
+        "recognized_face_names": ["Unknown"],
+        "primary_recognized_face": "Unknown",
+        "timestamp_ms": 1770000000000,
+        "timestamp_iso": "2026-02-28T08:00:00+00:00",
+        "query": {},
+        "raw_payload": {},
+        "event_types": ["unifi_protect_bridge_face_unknown", "unifi_protect_bridge_face"],
+    }
+
+    asyncio.run(runtime.async_process_webhook(normalized))
+
+    assert not runtime.has_sensor_spec("recognized_face:global:unknown")
+
+
+def test_runtime_rebuild_preserves_recognized_face_specs_from_registry() -> None:
+    registry = er.EntityRegistry()
+    registry.entities = [
+        SimpleNamespace(
+            entity_id="sensor.alice",
+            unique_id="entry-1_recognized_face_alice",
+            domain="sensor",
+            platform="unifi_protect_bridge",
+            config_entry_id="entry-1",
+        ),
+        SimpleNamespace(
+            entity_id="sensor.front_door_alice",
+            unique_id="entry-1_cam-1_recognized_face_alice",
+            domain="sensor",
+            platform="unifi_protect_bridge",
+            config_entry_id="entry-1",
+        ),
+    ]
+    runtime = HaProtectBridgeRuntime(SimpleNamespace(entity_registry=registry), _mock_entry({}))
+    runtime.catalog = {
+        "lookup": {"CAM1": "cam-1"},
+        "managed_sources": ["face_known"],
+        "cameras": [
+            {
+                "camera_key": "cam-1",
+                "camera_id": "cam-1",
+                "device_mac": "CAM1",
+                "name": "Front Door",
+                "supported_sources": ["face_known"],
+            }
+        ],
+    }
+
+    runtime._rebuild_sensor_specs()
+    runtime._remove_stale_sensor_registry_entries()
+
+    assert runtime.has_sensor_spec("recognized_face:global:alice")
+    assert runtime.has_sensor_spec("recognized_face:cam-1:alice")
+    assert registry.removed == []
+
+
 def test_runtime_buffers_webhooks_until_sensor_specs_exist() -> None:
     runtime = HaProtectBridgeRuntime(SimpleNamespace(), _mock_entry({}))
     calls = 0

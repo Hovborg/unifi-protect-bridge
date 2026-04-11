@@ -258,6 +258,40 @@ Every incoming webhook fires `unifi_protect_bridge_webhook`. Recognized detectio
 - `unifi_protect_bridge_audio_alarm_smoke`
 - `unifi_protect_bridge_audio_alarm_speak`
 
+Webhook events expose sanitized metadata only. For face recognition alarms,
+Protect can include the recognized value on the trigger. The bridge exposes that
+as:
+
+- `trigger_values`
+- `recognized_face_names`
+- `primary_recognized_face`
+
+Face names and training still belong in UniFi Protect. The bridge reads what
+Protect sends and makes it usable in Home Assistant automations; it does not
+create or rename Protect face profiles.
+
+When a named face is seen, the bridge also creates timestamp sensors for that
+name:
+
+- one global `Last recognized face <name>` sensor
+- one `Last recognized face <name>` sensor on the camera that triggered the alarm
+
+These sensors are created lazily from live webhook payloads because Protect does
+not provide a documented local API for listing every trained face profile. After
+Home Assistant has created a named-face sensor once, the bridge keeps it across
+restarts using the entity registry.
+
+Example person-specific automation condition:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: unifi_protect_bridge_face_known
+conditions:
+  - condition: template
+    value_template: "{{ 'Alice' in trigger.event.data.recognized_face_names }}"
+```
+
 ## Supported Detections
 
 The current automatic coverage focuses on Protect detection families exposed by

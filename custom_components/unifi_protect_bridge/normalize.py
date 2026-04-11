@@ -112,6 +112,8 @@ def normalize_webhook_payload(
     source_values = _extract_source_values(alarm, query)
     detection_types = _extract_detection_types(alarm_name, source_values)
     device_ids = _extract_device_ids(alarm, query)
+    trigger_values = _extract_trigger_values(alarm, query)
+    recognized_face_names = _extract_recognized_face_names(detection_types, trigger_values)
     timestamp_ms = _coerce_int(_first_present(payload.get("timestamp"), query.get("timestamp")))
 
     return {
@@ -120,6 +122,9 @@ def normalize_webhook_payload(
         "primary_detection_type": detection_types[0] if detection_types else None,
         "device_ids": device_ids,
         "source_values": source_values,
+        "trigger_values": trigger_values,
+        "recognized_face_names": recognized_face_names,
+        "primary_recognized_face": recognized_face_names[0] if recognized_face_names else None,
         "timestamp_ms": timestamp_ms,
         "timestamp_iso": _timestamp_to_iso(timestamp_ms),
         "query": query,
@@ -156,6 +161,9 @@ def normalize_event_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]
         "primary_detection_type": detection_types[0] if detection_types else None,
         "device_ids": device_ids,
         "source_values": smart_detect_types or ([event_type] if event_type else []),
+        "trigger_values": [],
+        "recognized_face_names": [],
+        "primary_recognized_face": None,
         "timestamp_ms": timestamp_ms,
         "timestamp_iso": _timestamp_to_iso(timestamp_ms),
         "query": {},
@@ -276,27 +284,61 @@ def _normalize_detection(value: str) -> str | None:
 
 
 def _extract_device_ids(alarm: Mapping[str, Any], query: Mapping[str, str]) -> list[str]:
-    device_ids: list[str] = []
+    source_device_ids: list[str] = []
+    trigger_device_ids: list[str] = []
+    query_device_ids: list[str] = []
 
     for item in alarm.get("sources", []) or []:
         if isinstance(item, Mapping):
             device = _string_or_none(item.get("device"))
             if device:
-                device_ids.append(device)
+                source_device_ids.append(device)
 
     for item in alarm.get("triggers", []) or []:
         if isinstance(item, Mapping):
             for field in ("device", "deviceId", "mac"):
                 device = _string_or_none(item.get(field))
                 if device:
-                    device_ids.append(device)
+                    trigger_device_ids.append(device)
 
     for field in ("device", "device_id", "deviceId", "camera"):
         query_device = _string_or_none(query.get(field))
         if query_device:
-            device_ids.append(query_device)
+            query_device_ids.append(query_device)
 
-    return _unique(device_ids)
+    if trigger_device_ids or query_device_ids:
+        return _unique([*trigger_device_ids, *query_device_ids])
+    return _unique(source_device_ids)
+
+
+def _extract_trigger_values(alarm: Mapping[str, Any], query: Mapping[str, str]) -> list[str]:
+    values: list[str] = []
+
+    for item in alarm.get("triggers", []) or []:
+        if isinstance(item, Mapping):
+            for field in ("value", "label", "displayValue"):
+                value = _string_or_none(item.get(field))
+                if value:
+                    values.append(value)
+
+    for field in ("value", "trigger_value", "recognized_face", "recognized_name"):
+        value = _string_or_none(query.get(field))
+        if value:
+            values.append(value)
+
+    return _unique(values)
+
+
+def _extract_recognized_face_names(
+    detection_types: list[str],
+    trigger_values: list[str],
+) -> list[str]:
+    has_face_detection = any(
+        detection == "face" or detection.startswith("face_") for detection in detection_types
+    )
+    if not has_face_detection:
+        return []
+    return trigger_values
 
 
 def _slugify(value: str) -> str:

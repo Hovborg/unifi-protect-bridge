@@ -135,6 +135,49 @@ def test_normalize_face_subtype_also_updates_generic_face() -> None:
     ]
 
 
+def test_normalize_prefers_trigger_device_over_alarm_scope() -> None:
+    normalized = normalize_webhook_payload(
+        {
+            "alarm": {
+                "name": "Known face",
+                "sources": [
+                    {"device": "SCOPE1", "type": "include"},
+                    {"device": "SCOPE2", "type": "include"},
+                ],
+                "conditions": [{"condition": {"source": "face_known"}}],
+                "triggers": [{"key": "face_known", "device": "TRIGGER1"}],
+            }
+        },
+        {},
+    )
+
+    assert normalized["device_ids"] == ["TRIGGER1"]
+
+
+def test_normalize_known_face_extracts_recognized_face_name() -> None:
+    normalized = normalize_webhook_payload(
+        {
+            "alarm": {
+                "name": "Known face",
+                "conditions": [{"condition": {"source": "face_known"}}],
+                "triggers": [
+                    {
+                        "key": "face_known",
+                        "device": "84784828725C",
+                        "value": "Alice",
+                    }
+                ],
+            }
+        },
+        {},
+    )
+
+    assert normalized["detection_types"] == ["face_known", "face"]
+    assert normalized["trigger_values"] == ["Alice"]
+    assert normalized["recognized_face_names"] == ["Alice"]
+    assert normalized["primary_recognized_face"] == "Alice"
+
+
 def test_normalize_smart_detect_event_payload() -> None:
     normalized = normalize_event_payload(
         {

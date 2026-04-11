@@ -26,6 +26,7 @@ from .const import (
     DEFAULT_EVENT_BACKFILL_LIMIT,
     DOMAIN,
     MAX_EVENT_BACKFILL_LIMIT,
+    RECOGNIZED_FACE_SOURCE,
     SOURCE_ICONS,
 )
 from .normalize import normalize_event_payload
@@ -42,6 +43,7 @@ class BridgeSensorSpec:
     icon: str | None
     source: str
     camera_key: str | None = None
+    recognized_face_name: str | None = None
 
 
 class HaProtectBridgeRuntime:
@@ -193,6 +195,8 @@ class HaProtectBridgeRuntime:
                         "camera_mac": camera["device_mac"],
                     }
                 )
+        if spec.recognized_face_name:
+            attributes["recognized_face_name"] = spec.recognized_face_name
         summary = self._event_summaries.get(sensor_key)
         if summary:
             attributes.update(summary)
@@ -460,6 +464,9 @@ class HaProtectBridgeRuntime:
                     camera_key=camera["camera_key"],
                 )
 
+        self._restore_existing_recognized_face_specs(sensor_specs)
+        self._restore_recognized_face_specs_from_registry(sensor_specs)
+
         active_keys = set(sensor_specs)
         for stale_key in list(self._timestamps):
             if stale_key not in active_keys:
@@ -467,6 +474,63 @@ class HaProtectBridgeRuntime:
                 self._event_summaries.pop(stale_key, None)
 
         self._sensor_specs = sensor_specs
+
+    def _restore_existing_recognized_face_specs(
+        self,
+        sensor_specs: dict[str, BridgeSensorSpec],
+    ) -> None:
+        active_camera_keys = {
+            str(camera["camera_key"])
+            for camera in self.catalog.get("cameras") or []
+            if camera.get("camera_key")
+        }
+
+        for spec in self._sensor_specs.values():
+            if not spec.recognized_face_name:
+                continue
+            if spec.camera_key and spec.camera_key not in active_camera_keys:
+                continue
+            sensor_specs[spec.key] = spec
+
+    @callback
+    def _restore_recognized_face_specs_from_registry(
+        self,
+        sensor_specs: dict[str, BridgeSensorSpec],
+    ) -> None:
+        registry = er.async_get(self.hass)
+        camera_keys = [
+            str(camera["camera_key"])
+            for camera in self.catalog.get("cameras") or []
+            if camera.get("camera_key")
+        ]
+        global_prefix = f"{self.entry.entry_id}_recognized_face_"
+        camera_prefixes = {
+            camera_key: f"{self.entry.entry_id}_{camera_key}_recognized_face_"
+            for camera_key in camera_keys
+        }
+
+        for entity_entry in er.async_entries_for_config_entry(
+            registry,
+            self.entry.entry_id,
+        ):
+            if entity_entry.domain != "sensor" or entity_entry.platform != DOMAIN:
+                continue
+
+            unique_id = str(entity_entry.unique_id or "")
+            if unique_id.startswith(global_prefix):
+                face_slug = unique_id.removeprefix(global_prefix)
+                self._ensure_recognized_face_spec(sensor_specs, face_slug)
+                continue
+
+            for camera_key, prefix in camera_prefixes.items():
+                if unique_id.startswith(prefix):
+                    face_slug = unique_id.removeprefix(prefix)
+                    self._ensure_recognized_face_spec(
+                        sensor_specs,
+                        face_slug,
+                        camera_key=camera_key,
+                    )
+                    break
 
     @callback
     def _remove_stale_sensor_registry_entries(self) -> None:
@@ -634,7 +698,78 @@ class HaProtectBridgeRuntime:
                 if self._update_sensor_state(sensor_key, timestamp, normalized):
                     changed_sensor_count += 1
 
+        for sensor_key in self._ensure_recognized_face_specs(
+            normalized.get("recognized_face_names") or [],
+            matched_cameras,
+        ):
+            if self._update_sensor_state(sensor_key, timestamp, normalized):
+                changed_sensor_count += 1
+
         return changed_sensor_count, matched_cameras
+
+    def _ensure_recognized_face_specs(
+        self,
+        names: list[str],
+        matched_cameras: list[dict[str, Any]],
+    ) -> list[str]:
+        sensor_keys: list[str] = []
+        if not names:
+            return sensor_keys
+
+        sensor_specs = self._sensor_specs
+        for raw_name in names:
+            face_name = _clean_recognized_face_name(raw_name)
+            if not face_name:
+                continue
+            face_slug = _recognized_face_slug(face_name)
+            if not face_slug:
+                continue
+            sensor_keys.append(
+                self._ensure_recognized_face_spec(sensor_specs, face_slug, face_name)
+            )
+            for camera in matched_cameras:
+                camera_key = camera.get("camera_key")
+                if not camera_key:
+                    continue
+                sensor_keys.append(
+                    self._ensure_recognized_face_spec(
+                        sensor_specs,
+                        face_slug,
+                        face_name,
+                        camera_key=str(camera_key),
+                    )
+                )
+
+        return list(dict.fromkeys(sensor_keys))
+
+    def _ensure_recognized_face_spec(
+        self,
+        sensor_specs: dict[str, BridgeSensorSpec],
+        face_slug: str,
+        face_name: str | None = None,
+        *,
+        camera_key: str | None = None,
+    ) -> str:
+        if camera_key:
+            key = f"recognized_face:{camera_key}:{face_slug}"
+            unique_id = f"{self.entry.entry_id}_{camera_key}_recognized_face_{face_slug}"
+        else:
+            key = f"recognized_face:global:{face_slug}"
+            unique_id = f"{self.entry.entry_id}_recognized_face_{face_slug}"
+        if key in sensor_specs:
+            return key
+
+        label = face_name or _recognized_face_label_from_slug(face_slug)
+        sensor_specs[key] = BridgeSensorSpec(
+            key=key,
+            unique_id=unique_id,
+            name=f"Last recognized face {label}",
+            icon=SOURCE_ICONS.get(RECOGNIZED_FACE_SOURCE),
+            source=RECOGNIZED_FACE_SOURCE,
+            camera_key=camera_key,
+            recognized_face_name=label,
+        )
+        return key
 
     def _update_sensor_state(
         self,
@@ -667,12 +802,20 @@ def _timestamp_from_normalized(normalized: dict[str, Any]) -> datetime:
 
 
 def _event_summary(normalized: dict[str, Any]) -> dict[str, Any]:
-    return {
+    summary = {
         "last_alarm_name": normalized.get("alarm_name"),
         "last_detection_types": list(normalized.get("detection_types") or []),
         "last_device_ids": list(normalized.get("device_ids") or []),
         "last_timestamp": normalized.get("timestamp_iso"),
     }
+    trigger_values = list(normalized.get("trigger_values") or [])
+    if trigger_values:
+        summary["last_trigger_values"] = trigger_values
+    recognized_face_names = list(normalized.get("recognized_face_names") or [])
+    if recognized_face_names:
+        summary["last_recognized_face_names"] = recognized_face_names
+        summary["last_recognized_face"] = recognized_face_names[0]
+    return summary
 
 
 def _restored_event_summary(attributes: dict[str, Any], timestamp: datetime) -> dict[str, Any]:
@@ -680,6 +823,9 @@ def _restored_event_summary(attributes: dict[str, Any], timestamp: datetime) -> 
         "last_alarm_name": attributes.get("last_alarm_name"),
         "last_detection_types": list(attributes.get("last_detection_types") or []),
         "last_device_ids": list(attributes.get("last_device_ids") or []),
+        "last_trigger_values": list(attributes.get("last_trigger_values") or []),
+        "last_recognized_face_names": list(attributes.get("last_recognized_face_names") or []),
+        "last_recognized_face": attributes.get("last_recognized_face"),
         "last_timestamp": attributes.get("last_timestamp") or timestamp.isoformat(),
     }
     return {key: value for key, value in summary.items() if value not in (None, [], "")}
@@ -696,3 +842,25 @@ def _isoformat(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat()
+
+
+def _clean_recognized_face_name(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.casefold() in {"unknown", "none", "null"}:
+        return None
+    return text[:80]
+
+
+def _recognized_face_slug(value: str) -> str:
+    result = value.strip().casefold()
+    result = result.replace("-", "_").replace(" ", "_")
+    result = "".join(character for character in result if character.isalnum() or character == "_")
+    while "__" in result:
+        result = result.replace("__", "_")
+    return result.strip("_")
+
+
+def _recognized_face_label_from_slug(value: str) -> str:
+    return value.replace("_", " ").strip() or "unknown"
